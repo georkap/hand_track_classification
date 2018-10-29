@@ -46,25 +46,27 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg), log_file)
 
-def test(model, test_iterator, cur_epoch, log_file):
-    top1, top5 = AverageMeter(), AverageMeter()
+def test(model, criterion, test_iterator, cur_epoch, dataset='Test', log_file):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
-        print_and_save('Evaluating after epoch: {}'.format(cur_epoch))
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset))
         for batch_idx, (inputs, targets) in enumerate(test_iterator):
             inputs = torch.tensor(inputs).cuda()
             targets = torch.tensor(targets)
 
             output = model(inputs)
+            loss = criterion(output, targets)
 
             t1, t5 = accuracy(output.detach().cpu(), targets, topk=(1,5))
             top1.update(t1.item(), inputs.size(0))
             top5.update(t5.item(), inputs.size(0))
+            losses.update(loss.item(), inputs.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                     cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
 
-        print_and_save('Test Results: Top1 {:.3f} Top5 {:.3f}'.format(top1.avg, top5.avg), log_file)
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
 def main():
