@@ -9,5 +9,5 @@ in order to produce continuous hand tracks.
 Then I turn the hand tracks into images which I classify using a resnet (18, 50, 101) backbone into the 120 verb classes of Epic Kitchens.
 
 TODO list:
-- [] Add code to produce 3d representation of tracks
-- [] Integrate MFNet for 3d convolutions
+- [ ] Add code to produce 3d representation of tracks
+- [ ] Integrate MFNet for 3d convolutions
