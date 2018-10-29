@@ -12,5 +12,6 @@ Then I turn the hand tracks into images which I classify using a resnet (18, 50,
 It is practical to create symlinks "mklink /D target origin" into the base folder and have the split\\*.txt files point to the relative path to the base folder. 
 
 TODO list:
+- [ ] Train 1d resnet for binary images
 - [ ] Add code to produce 3d representation of tracks
 - [ ] Integrate MFNet for 3d convolutions
