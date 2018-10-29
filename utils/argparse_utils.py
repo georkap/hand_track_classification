@@ -12,7 +12,7 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='Hand activity recognition')
     
-    parser.add_argument('model_name', type=str, help="A name to distinguish the model")
+    parser.add_argument('model_name', type=str, help="Naming convention: resXXX_channels_batchsize_dropout_maxepochs and optionally _pt if pretrained is used and _ft if only the last linear is trained")
     parser.add_argument('train_list', type=str)
     parser.add_argument('test_list', type=str)
     
@@ -20,9 +20,10 @@ def parse_args():
     parser.add_argument('--base_output_dir', type=str, default=r'outputs/')
     
     # Model parameters
-    parser.add_argument('--resnet_version', type=str, default='18', help="One of 18, 34, 50, 101, 152")
+    parser.add_argument('--resnet_version', type=str, default='18', choices=['18','34','50','101','152'], help="One of 18, 34, 50, 101, 152")
     parser.add_argument('--pretrained', default=False, action='store_true')
     parser.add_argument('--feature_extraction', default=False, action='store_true')
+    parser.add_argument('--channels', default='RGB', choices=['RGB', 'G'], help="optional to train on one input channel with binary inputs.")
     
     # Training parameters
     parser.add_argument('--dropout', type=float, default=0.5)

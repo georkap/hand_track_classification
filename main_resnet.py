@@ -11,10 +11,11 @@ import os
 import time
 import shutil
 import torch
+import cv2
 from models.resnet_zoo import resnet_loader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize
+from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize, ResizePadFirst
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
@@ -70,6 +71,10 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
+meanRGB=[0.485, 0.456, 0.406]
+stdRGB=[0.229, 0.224, 0.225]
+meanG = [0.5]
+stdG = [1.]
 def main():
     args = parse_args()
     verb_classes = 120
@@ -88,6 +93,9 @@ def main():
         log_file = None
         
     print_model_config(args, log_file)
+    
+    mean = meanRGB if args.channels == 'RGB' else meanG
+    std = stdRGB if args.channels == 'RGB' else stdG
 
     model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, args.feature_extraction, args.resnet_version) # 120, True, False
     model_ft = torch.nn.DataParallel(model_ft).cuda()
@@ -112,16 +120,17 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    normalize = transforms.Normalize(mean=mean, std=std)
 
-    train_transforms = transforms.Compose([Resize((224,224)), 
+#    resize = Resize((224,224))
+    resize = ResizePadFirst(224, cv2.INTER_CUBIC)
+    train_transforms = transforms.Compose([resize, 
                                            RandomHorizontalFlip(),
                                            transforms.ToTensor(), normalize])
     train_loader = DatasetLoader(train_list, train_transforms)
-    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
+    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
-    test_transforms = transforms.Compose([Resize((224,224)),
+    test_transforms = transforms.Compose([resize,
                                           transforms.ToTensor(), normalize])
     test_loader = DatasetLoader(test_list, test_transforms)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)

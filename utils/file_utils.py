@@ -15,7 +15,7 @@ def print_and_save(text, path):
             print(text, file=f)
             
 def print_model_config(args, log_file):
-    to_print = "Model config\n"
+    to_print = "Model config {}\n".format(args.channels)
     to_print += "Resnet {}, Using pretrained weights {}, Only train last linear {}\n".format(args.resnet_version, args.pretrained, args.feature_extraction)
     to_print += "Parameters: Batch size {}, Learning rate {}, LR decrease steps {}, Momentum {}, Weight decay {}\n".format(args.batch_size, args.lr, args.lr_steps, args.momentum, args.decay)
     to_print += "Stop after {} epochs, evaluate every {} epoch(s), save weights every {} epoch(s)\n".format(args.max_epochs, args.eval_freq, args.save_freq)
