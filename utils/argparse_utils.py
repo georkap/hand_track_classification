@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument('--base_output_dir', type=str, default=r'outputs/')
     
     # Model parameters
+    parser.add_argument('--resnet_version', type=str, default='18')
     parser.add_argument('--pretrained', default=False, action='store_true')
     parser.add_argument('--feature_extraction', default=False, action='store_true')
     

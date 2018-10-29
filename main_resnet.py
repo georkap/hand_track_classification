@@ -11,13 +11,13 @@ import os
 import time
 import shutil
 import torch
-from models.resnet_zoo import resnet18loader
+from models.resnet_zoo import resnet_loader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
-from utils.file_utils import print_and_save
+from utils.file_utils import print_and_save, print_model_config
 
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -80,13 +80,15 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)   
     if args.logging:
-        log_file = os.path.join(base_output_dir, model_name+".txt")
+        log_file = os.path.join(base_output_dir, model_name, model_name+".txt")
     else:
         log_file = None
+        
+    print_model_config(args, log_file)
 
-    model_ft = resnet18loader(verb_classes, args.pretrained, args.feature_extraction) # 120, True, False
+    model_ft = resnet_loader(verb_classes, args.pretrained, args.feature_extraction, args.resnet_version) # 120, True, False
     model_ft = torch.nn.DataParallel(model_ft).cuda()
-
+    print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
 
     params_to_update = model_ft.parameters()
@@ -103,7 +105,7 @@ def main():
                 print_and_save("\t{}".format(name), log_file)
 
     optimizer = torch.optim.SGD(params_to_update,
-                                lr=args.lr, momentum=args.momentum, decay=args.decay)
+                                lr=args.lr, momentum=args.momentum, weight_decay=args.decay)
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
 
