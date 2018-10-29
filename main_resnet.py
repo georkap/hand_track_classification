@@ -46,7 +46,7 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg), log_file)
 
-def test(model, criterion, test_iterator, cur_epoch, dataset='Test', log_file):
+def test(model, criterion, test_iterator, cur_epoch, dataset="Test", log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
