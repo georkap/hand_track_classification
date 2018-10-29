@@ -1,0 +1,4 @@
+hand_detection_track_images\P24\P24_08\90442_0_35.png 90442 0 35
+hand_detection_track_images\P24\P24_08\90534_8_35.png 90534 8 35
+hand_detection_track_images\P24\P24_08\9501_5_13.png 9501 5 13
+hand_detection_track_images\P24\P24_08\978_2_3.png 978 2 3

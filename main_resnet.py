@@ -22,7 +22,8 @@ from utils.file_utils import print_and_save, print_model_config
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
-
+    
+    print_and_save('*********', log_file)
     print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
     t0 = time.time()
     for batch_idx, (inputs, targets) in enumerate(train_iterator):
@@ -46,19 +47,19 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg), log_file)
 
-def test(model, criterion, test_iterator, cur_epoch, dataset="Test", log_file):
+def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
-        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset))
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
         for batch_idx, (inputs, targets) in enumerate(test_iterator):
             inputs = torch.tensor(inputs).cuda()
-            targets = torch.tensor(targets)
+            targets = torch.tensor(targets).cuda()
 
             output = model(inputs)
             loss = criterion(output, targets)
 
-            t1, t5 = accuracy(output.detach().cpu(), targets, topk=(1,5))
+            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
             top1.update(t1.item(), inputs.size(0))
             top5.update(t5.item(), inputs.size(0))
             losses.update(loss.item(), inputs.size(0))
@@ -88,7 +89,7 @@ def main():
         
     print_model_config(args, log_file)
 
-    model_ft = resnet_loader(verb_classes, args.pretrained, args.feature_extraction, args.resnet_version) # 120, True, False
+    model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, args.feature_extraction, args.resnet_version) # 120, True, False
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
@@ -114,7 +115,8 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    train_transforms = transforms.Compose([Resize((224,224)), RandomHorizontalFlip(),
+    train_transforms = transforms.Compose([Resize((224,224)), 
+                                           RandomHorizontalFlip(),
                                            transforms.ToTensor(), normalize])
     train_loader = DatasetLoader(train_list, train_transforms)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
@@ -130,7 +132,9 @@ def main():
         lr_scheduler.step()
         train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
         if (epoch+1) % args.eval_freq == 0:
-            new_top1 = test(model_ft, test_iterator, epoch, log_file)
+            if args.eval_on_train:
+                test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
+            new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
             isbest = new_top1 >= top1
         if (epoch+1) % args.save_freq == 0:
             weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
