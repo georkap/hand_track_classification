@@ -196,7 +196,7 @@ class RandomCrop(object):
     
 if __name__=='__main__':
     image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE)
-    resize_only = Resize((224,224), cv2.INTER_NEAREST)
+    resize_only = Resize((224,224), cv2.INTER_CUBIC)
     resize_pad = ResizeZeroPad(224, cv2.INTER_NEAREST)
     cubic_pf_fun = ResizePadFirst(224, cv2.INTER_CUBIC)
     linear_pf_fun = ResizePadFirst(224, cv2.INTER_LINEAR)
@@ -205,8 +205,8 @@ if __name__=='__main__':
     lanc_pf_fun = ResizePadFirst(224, cv2.INTER_LANCZOS4)
     linext_pf_fun = ResizePadFirst(224, cv2.INTER_LINEAR_EXACT)
 
-    resize1 = resize_only(image)
-    resize2 = resize_pad(image)
+    resize_nopad = resize_only(image)
+    resize_pad_first = resize_pad(image)
     
     cubic_pf = cubic_pf_fun(image)
 #    cubic_pf = np.where(cubic_pf_fun(image) > 1, 255, 0).astype(np.float32)
@@ -217,8 +217,8 @@ if __name__=='__main__':
     linext_pf = linext_pf_fun(image)
     
     cv2.imshow('original', image)
-    cv2.imshow('original resize', resize1)
-    cv2.imshow('padded resize', resize2)
+    cv2.imshow('original resize', resize_nopad)
+    cv2.imshow('padded resize', resize_pad_first)
     cv2.imshow('cubic', cubic_pf)
 #    cv2.imshow('nearest', nearest_pf)
 #    cv2.imshow('area', area_pf)

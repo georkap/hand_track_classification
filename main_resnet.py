@@ -122,8 +122,8 @@ def main():
 
     normalize = transforms.Normalize(mean=mean, std=std)
 
-#    resize = Resize((224,224))
-    resize = ResizePadFirst(224, cv2.INTER_LINEAR_EXACT)
+#    resize = Resize((224,224), cv2.INTER_LINEAR_EXACT)
+    resize = ResizePadFirst(224, cv2.INTER_LINEAR)
     train_transforms = transforms.Compose([resize, 
                                            RandomHorizontalFlip(),
                                            transforms.ToTensor(), normalize])
