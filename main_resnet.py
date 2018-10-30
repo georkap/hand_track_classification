@@ -138,7 +138,7 @@ def main():
     train_loader = DatasetLoader(train_list, train_transforms)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
-    test_transforms = transforms.Compose([resize,
+    test_transforms = transforms.Compose([resize, To01Range(),
                                           transforms.ToTensor(), normalize])
     test_loader = DatasetLoader(test_list, test_transforms)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
