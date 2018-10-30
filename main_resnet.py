@@ -123,7 +123,7 @@ def main():
     normalize = transforms.Normalize(mean=mean, std=std)
 
 #    resize = Resize((224,224))
-    resize = ResizePadFirst(224, cv2.INTER_LINEXT)
+    resize = ResizePadFirst(224, cv2.INTER_LINEAR_EXACT)
     train_transforms = transforms.Compose([resize, 
                                            RandomHorizontalFlip(),
                                            transforms.ToTensor(), normalize])
@@ -145,6 +145,7 @@ def main():
                 test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
             new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
             isbest = True if new_top1 >= top1 else False
+            top1 = new_top1
             
             weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
             print_and_save('Saving weights to {}'.format(weight_file), log_file)
