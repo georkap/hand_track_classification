@@ -39,7 +39,6 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--eval_freq', type=int, default=1)
     parser.add_argument('--eval_on_train', default=False, action='store_true')
-    parser.add_argument('--save_freq', type=int, default=1)
     parser.add_argument('--logging', default=False, action='store_true')
     
     args = parser.parse_args()
