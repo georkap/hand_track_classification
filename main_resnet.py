@@ -15,7 +15,7 @@ import cv2
 from models.resnet_zoo import resnet_loader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize, ResizePadFirst
+from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize, ResizePadFirst, To01Range
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
@@ -75,6 +75,11 @@ meanRGB=[0.485, 0.456, 0.406]
 stdRGB=[0.229, 0.224, 0.225]
 meanG = [0.5]
 stdG = [1.]
+
+interpolation_methods = {'linear':cv2.INTER_LINEAR, 'cubic':cv2.INTER_CUBIC,
+                         'nn':cv2.INTER_NEAREST, 'area':cv2.INTER_AREA,
+                         'lanc':cv2.INTER_LANCZOS4, 'linext':cv2.INTER_LINEAR_EXACT}
+
 def main():
     args = parse_args()
     verb_classes = 120
@@ -122,10 +127,13 @@ def main():
 
     normalize = transforms.Normalize(mean=mean, std=std)
 
-#    resize = Resize((224,224), cv2.INTER_LINEAR_EXACT)
-    resize = ResizePadFirst(224, cv2.INTER_LINEAR)
+    if args.pad:
+        resize = ResizePadFirst(224, args.bin_img, interpolation_methods[args.inter])
+    else:
+        resize = Resize((224,224), args.bin_img, interpolation_methods[args.inter])
+    
     train_transforms = transforms.Compose([resize, 
-                                           RandomHorizontalFlip(),
+                                           RandomHorizontalFlip(), To01Range(),
                                            transforms.ToTensor(), normalize])
     train_loader = DatasetLoader(train_list, train_transforms)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)

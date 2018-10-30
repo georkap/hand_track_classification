@@ -53,7 +53,6 @@ class DatasetLoader(torch.utils.data.Dataset):
         img = cv2.imread(self.samples_list[index].image_path, self.image_read_type).astype(np.float32)
         if self.channels=='RGB':
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        img /= 255.
 
         if self.transform is not None:
             img = self.transform(img)
@@ -72,9 +71,19 @@ class RandomHorizontalFlip(object):
             data = np.ascontiguousarray(data)
         return data
 
+class To01Range(object):
+    def __init__(self):
+        pass
+    
+    def __call__(self, data):
+        norm_image = cv2.normalize(data, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32FC3)
+        
+        return norm_image
+        
 class ResizePadFirst(object):
-    def __init__(self, size, interpolation=cv2.INTER_LINEAR):
+    def __init__(self, size, binarize, interpolation=cv2.INTER_LINEAR):
         self.size = size # int
+        self.binarize = binarize
         self.interpolation = interpolation    
 
     def __call__(self, data):
@@ -94,7 +103,9 @@ class ResizePadFirst(object):
               
         scaled_data = cv2.resize(padded_data, (self.size, self.size), interpolation=self.interpolation)
         
-        scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
+        if self.binarize: 
+            scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
+            
         return scaled_data
 
 
@@ -145,8 +156,9 @@ class Resize(object):
     size: size of the smaller edge
     interpolation: Default: cv2.INTER_LINEAR
     """
-    def __init__(self, size, interpolation=cv2.INTER_LINEAR):
+    def __init__(self, size, binarize, interpolation=cv2.INTER_LINEAR):
         self.size = size # [w, h]
+        self.binarize = binarize
         self.interpolation = interpolation
 
     def __call__(self, data):
@@ -170,6 +182,9 @@ class Resize(object):
             scaled_data = cv2.resize(data, (new_w, new_h), interpolation=self.interpolation)
         else:
             scaled_data = data
+
+        if self.binarize: 
+            scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
 
         return scaled_data
 
@@ -195,18 +210,19 @@ class RandomCrop(object):
     
     
 if __name__=='__main__':
-    image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE)
-    resize_only = Resize((224,224), cv2.INTER_CUBIC)
-    resize_pad = ResizeZeroPad(224, cv2.INTER_NEAREST)
-    cubic_pf_fun = ResizePadFirst(224, cv2.INTER_CUBIC)
-    linear_pf_fun = ResizePadFirst(224, cv2.INTER_LINEAR)
-    nearest_pf_fun = ResizePadFirst(224, cv2.INTER_NEAREST)
-    area_pf_fun = ResizePadFirst(224, cv2.INTER_AREA)
-    lanc_pf_fun = ResizePadFirst(224, cv2.INTER_LANCZOS4)
-    linext_pf_fun = ResizePadFirst(224, cv2.INTER_LINEAR_EXACT)
+    image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
+
+    resize_only = Resize((224,224), False, cv2.INTER_CUBIC)
+#    resize_pad = ResizeZeroPad(224, True, cv2.INTER_NEAREST)
+    cubic_pf_fun = ResizePadFirst(224, True, cv2.INTER_CUBIC)
+    linear_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR)
+    nearest_pf_fun = ResizePadFirst(224, True, cv2.INTER_NEAREST)
+    area_pf_fun = ResizePadFirst(224, True, cv2.INTER_AREA)
+    lanc_pf_fun = ResizePadFirst(224, True, cv2.INTER_LANCZOS4)
+    linext_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR_EXACT)
 
     resize_nopad = resize_only(image)
-    resize_pad_first = resize_pad(image)
+#    resize_pad_first = resize_pad(image)
     
     cubic_pf = cubic_pf_fun(image)
 #    cubic_pf = np.where(cubic_pf_fun(image) > 1, 255, 0).astype(np.float32)
@@ -218,7 +234,7 @@ if __name__=='__main__':
     
     cv2.imshow('original', image)
     cv2.imshow('original resize', resize_nopad)
-    cv2.imshow('padded resize', resize_pad_first)
+#    cv2.imshow('padded resize', resize_pad_first)
     cv2.imshow('cubic', cubic_pf)
 #    cv2.imshow('nearest', nearest_pf)
 #    cv2.imshow('area', area_pf)

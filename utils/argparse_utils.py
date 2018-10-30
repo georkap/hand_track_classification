@@ -12,15 +12,26 @@ import argparse
 def parse_args():
     parser = argparse.ArgumentParser(description='Hand activity recognition')
     
-    parser.add_argument('model_name', type=str, help="Naming convention: resXXX_channels_batchsize_dropout_maxepochs and optionally _pt if pretrained is used and _ft if only the last linear is trained")
+    parser.add_argument('model_name', type=str, 
+                        help="Naming convention:"\
+                        +"resXXX_channels_batchsize_dropout_maxepochs"\
+                        + "_pt if pretrained is used, _ft if only the last linear is trained"\
+                        + "_interpolation_method, _bin or _smooth and _pad or nopad")
+    # Load the necessary paths
     parser.add_argument('train_list', type=str)
     parser.add_argument('test_list', type=str)
-    
-    # First load the necessary paths
     parser.add_argument('--base_output_dir', type=str, default=r'outputs/')
     
+    # Dataset parameters
+    parser.add_argument('--inter', type=str, default='cubic',
+                        choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
+    parser.add_argument('--bin_img', default=False, action='store_true')
+    parser.add_argument('--pad', default=False, action='store_true')    
+    
     # Model parameters
-    parser.add_argument('--resnet_version', type=str, default='18', choices=['18','34','50','101','152'], help="One of 18, 34, 50, 101, 152")
+    parser.add_argument('--resnet_version', type=str, default='18', 
+                        choices=['18','34','50','101','152'], 
+                        help="One of 18, 34, 50, 101, 152")
     parser.add_argument('--pretrained', default=False, action='store_true')
     parser.add_argument('--feature_extraction', default=False, action='store_true')
     parser.add_argument('--channels', default='RGB', choices=['RGB', 'G'], help="optional to train on one input channel with binary inputs.")
