@@ -102,7 +102,7 @@ def main():
     mean = meanRGB if args.channels == 'RGB' else meanG
     std = stdRGB if args.channels == 'RGB' else stdG
 
-    model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, args.feature_extraction, args.resnet_version) # 120, True, False
+    model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, args.feature_extraction, args.resnet_version, args.channels) # 120, True, False
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
@@ -128,19 +128,19 @@ def main():
     normalize = transforms.Normalize(mean=mean, std=std)
 
     if args.pad:
-        resize = ResizePadFirst(224, args.bin_img, interpolation_methods[args.inter])
+        resize = ResizePadFirst(224, False, interpolation_methods[args.inter]) # currently set this binarize to False, because it is false duh
     else:
-        resize = Resize((224,224), args.bin_img, interpolation_methods[args.inter])
+        resize = Resize((224,224), False, interpolation_methods[args.inter])
     
     train_transforms = transforms.Compose([resize, 
-                                           RandomHorizontalFlip(), To01Range(),
+                                           RandomHorizontalFlip(), To01Range(args.bin_img),
                                            transforms.ToTensor(), normalize])
-    train_loader = DatasetLoader(train_list, train_transforms)
+    train_loader = DatasetLoader(train_list, train_transforms, args.channels)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
-    test_transforms = transforms.Compose([resize, To01Range(),
+    test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
                                           transforms.ToTensor(), normalize])
-    test_loader = DatasetLoader(test_list, test_transforms)
+    test_loader = DatasetLoader(test_list, test_transforms, args.channels)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
     new_top1, top1 = 0.0, 0.0
@@ -153,7 +153,6 @@ def main():
                 test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
             new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
             isbest = True if new_top1 >= top1 else False
-            top1 = new_top1
             
             weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
             print_and_save('Saving weights to {}'.format(weight_file), log_file)
@@ -164,6 +163,7 @@ def main():
             if isbest:
                 best = os.path.join(output_dir, model_name+'_best.pth')
                 shutil.copyfile(weight_file, best)
+                top1 = new_top1
 
 if __name__=='__main__':
     main()

@@ -72,11 +72,17 @@ class RandomHorizontalFlip(object):
         return data
 
 class To01Range(object):
-    def __init__(self):
-        pass
+    def __init__(self, binarize):
+        self.binarize = binarize
     
     def __call__(self, data):
         norm_image = cv2.normalize(data, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32FC3)
+        
+        if len(norm_image.shape) == 2:
+            norm_image = np.expand_dims(norm_image, -1)
+        
+        if self.binarize: 
+            norm_image = np.where(norm_image > 0, 1., 0).astype(np.float32)
         
         return norm_image
         
@@ -105,7 +111,7 @@ class ResizePadFirst(object):
         
         if self.binarize: 
             scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
-            
+        
         return scaled_data
 
 
