@@ -8,65 +8,11 @@ train_log parser to graphs
 """
 
 import os
-import argparse
 import numpy as np
 import pandas as pd
 
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--train_log_path", type=str, help="The file to be analyzed", required=True)
-    return parser.parse_args()
-
-def get_eval_results(lines, test_set):
-    epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
-    res = [line.strip() for line in lines if line.startswith(test_set)]
-    if len(res)==0:
-        return epochs, [], [], []
-    loss, top1, top5 = [], [], []    
-    for r in res:
-        l = float(r.split(":")[1].split(",")[0].split()[1])
-        t1 = float(r.split(":")[1].split(",")[1].split()[1])
-        t5 = float(r.split(":")[1].split(",")[2].split()[1])
-        loss.append(l)
-        top1.append(t1)
-        top5.append(t5)
-    
-    assert len(epochs) == len(loss) == len(top1) == len(top5)
-    
-    return epochs, loss, top1, top5
-
-def parse_train_line(line):
-    epoch = int(line.split("Epoch:")[1].split(",")[0])
-    batch = line.split("Batch ")[1].split()[0]
-    b0 = int(batch.split("/")[0])
-    b1 = int(batch.split("/")[1])
-
-    loss_val = float(line.split("[avg:")[0].split()[-1])
-    top1_val = float(line.split("[avg:")[1].split()[-1])
-    top5_val = float(line.split("[avg:")[2].split()[-1])
-    loss_avg = float(line.split("avg:")[1].split("]")[0])
-    t1_avg = float(line.split("avg:")[2].split("]")[0])
-    t5_avg = float(line.split("avg:")[3].split("]")[0])
-    
-    return loss_val, top1_val, top5_val, loss_avg, t1_avg, t5_avg
-
-def get_train_results(lines):
-    epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
-    avg_loss, avg_t1, avg_t5 = [], [], []
-    train_start = False
-    for i, line in enumerate(lines):
-        if line.startswith("Beginning"):
-            train_start = True
-            continue
-        if train_start and line.startswith("Evaluating"):
-            loss_val, top1_val, top5_val, loss_avg, t1_avg, t5_avg = parse_train_line(lines[i-1])
-            avg_loss.append(loss_avg)
-            avg_t1.append(t1_avg)
-            avg_t5.append(t5_avg)
-            train_start = False
-    
-    return epochs, avg_loss, avg_t1, avg_t5
+from utils.argparse_utils import parse_args_train_log_file
+from utils.file_utils import get_eval_results, get_train_results
 
 def make_plot_dataframe(np_columns, str_columns, title, file):
     df = pd.DataFrame(data=np_columns, columns=str_columns)
@@ -76,7 +22,7 @@ def make_plot_dataframe(np_columns, str_columns, title, file):
     
     return df
 
-args = parse_args()
+args = parse_args_train_log_file() #--train_log_path
 LOG_FILE = args.train_log_path
 file_name = os.path.basename(LOG_FILE).split(".")[0]
 LOG_DIR = os.path.dirname(LOG_FILE)

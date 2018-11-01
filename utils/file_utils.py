@@ -22,3 +22,54 @@ def print_model_config(args, log_file):
     to_print += "Name {}\nTo train on {}\nTo test on {}\n".format(args.model_name, args.train_list, args.test_list)
     to_print += "Output will be saved at {}\n".format(os.path.join(args.base_output_dir, args.model_name))
     print_and_save(to_print, log_file)
+    
+def get_eval_results(lines, test_set):
+    epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
+    res = [line.strip() for line in lines if line.startswith(test_set)]
+    if len(res)==0:
+        return epochs, [], [], []
+    loss, top1, top5 = [], [], []    
+    for r in res:
+        l = float(r.split(":")[1].split(",")[0].split()[1])
+        t1 = float(r.split(":")[1].split(",")[1].split()[1])
+        t5 = float(r.split(":")[1].split(",")[2].split()[1])
+        loss.append(l)
+        top1.append(t1)
+        top5.append(t5)
+    
+    assert len(epochs) == len(loss) == len(top1) == len(top5)
+    
+    return epochs, loss, top1, top5
+
+def parse_train_line(line):
+    epoch = int(line.split("Epoch:")[1].split(",")[0])
+    batch = line.split("Batch ")[1].split()[0]
+    b0 = int(batch.split("/")[0])
+    b1 = int(batch.split("/")[1])
+
+    loss_val = float(line.split("[avg:")[0].split()[-1])
+    top1_val = float(line.split("[avg:")[1].split()[-1])
+    top5_val = float(line.split("[avg:")[2].split()[-1])
+    loss_avg = float(line.split("avg:")[1].split("]")[0])
+    t1_avg = float(line.split("avg:")[2].split("]")[0])
+    t5_avg = float(line.split("avg:")[3].split("]")[0])
+    
+    return loss_val, top1_val, top5_val, loss_avg, t1_avg, t5_avg
+
+def get_train_results(lines):
+    epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
+    avg_loss, avg_t1, avg_t5 = [], [], []
+    train_start = False
+    for i, line in enumerate(lines):
+        if line.startswith("Beginning"):
+            train_start = True
+            continue
+        if train_start and line.startswith("Evaluating"):
+            loss_val, top1_val, top5_val, loss_avg, t1_avg, t5_avg = parse_train_line(lines[i-1])
+            avg_loss.append(loss_avg)
+            avg_t1.append(t1_avg)
+            avg_t5.append(t5_avg)
+            train_start = False
+    
+    return epochs, avg_loss, avg_t1, avg_t5
+

@@ -54,3 +54,13 @@ def parse_args():
     
     args = parser.parse_args()
     return args
+
+def parse_args_train_log_file():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_log_path", type=str, help="The file to be analyzed", required=True)
+    return parser.parse_args()
+
+def parse_args_train_log_dir():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--train_log_dir", type=str, help="Dir containing the logs to be analyzed", required=True)
+    return parser.parse_args()
