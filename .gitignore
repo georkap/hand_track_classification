@@ -106,4 +106,4 @@ venv.bak/
 
 # Project specific symlinks
 hand_detection_track_images
-batch_run.bat
+batch_run*
