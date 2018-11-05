@@ -19,8 +19,9 @@ from utils.dataset_loader import DatasetLoader, RandomHorizontalFlip, Resize, Re
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
+from utils.train_utils import CyclicLR
 
-def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
+def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler=None):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
     
@@ -28,6 +29,8 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file):
     print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
     t0 = time.time()
     for batch_idx, (inputs, targets) in enumerate(train_iterator):
+        if lr_scheduler is not None:
+            lr_scheduler.step()
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         targets = torch.tensor(targets).cuda()
 
@@ -123,7 +126,22 @@ def main():
     optimizer = torch.optim.SGD(params_to_update,
                                 lr=args.lr, momentum=args.momentum, weight_decay=args.decay)
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
+    
+#    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
+    if args.lr_type == 'step':
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                       step_size=int(args.lr_steps[0]),
+                                                       gamma=float(args.lr_steps[1]))
+    elif args.lr_type == 'multistep':
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                            milestones=[int(x) for x in args.lr_steps[:-1]],
+                                                            gamma=float(args.lr_steps[-1]))
+    elif args.lr_type == 'clr':
+        lr_scheduler = CyclicLR(optimizer, base_lr=float(args.lr_steps[0]), 
+                                max_lr=float(args.lr_steps[1]), step_size_up=int(args.lr_steps[2]),
+                                step_size_down=int(args.lr_steps[3]), mode=str(args.lr_steps[4]),
+                                gamma=float(args.lr_steps[5]))
+
 
     normalize = transforms.Normalize(mean=mean, std=std)
 
@@ -146,7 +164,8 @@ def main():
     new_top1, top1 = 0.0, 0.0
     isbest = False
     for epoch in range(args.max_epochs):
-        lr_scheduler.step()
+        if args.lr_type is not 'clr':
+            lr_scheduler.step()
         train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
@@ -154,7 +173,10 @@ def main():
             new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
             isbest = True if new_top1 >= top1 else False
             
-            weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
+            if args.save_all_weights:
+                weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
+            else:
+                weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
             print_and_save('Saving weights to {}'.format(weight_file), log_file)
             torch.save({'epoch': epoch + 1,
                         'state_dict': model_ft.state_dict(),
@@ -164,6 +186,7 @@ def main():
                 best = os.path.join(output_dir, model_name+'_best.pth')
                 shutil.copyfile(weight_file, best)
                 top1 = new_top1
+                
 
 if __name__=='__main__':
     main()

@@ -40,7 +40,13 @@ def parse_args():
     parser.add_argument('--dropout', type=float, default=0.5)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--lr', type=float, default=0.001)
-    parser.add_argument('--lr_steps', nargs='+', type=int, default=[7])
+    parser.add_argument('--lr_type', type=str, default='step',
+                        choises=['step', 'multistep', 'clr'])
+    parser.add_argument('--lr_steps', nargs='+', type=float, default=[7],
+                        help="The value of lr_steps depends on lr_type. If lr_type is:"\
+                            +"'step' then lr_steps is a list of size 2 that contains the number of epochs needed to reduce the lr at lr_steps[0] and the gamma to reduce by, at lr_steps[1]."\
+                            +"'multistep' then lr_steps is a list of size n+1 for n number of learning rate decreases and the gamma to reduce by at lr_steps[-1]."\
+                            +"'clr' then lr_steps is a list of size 6: [base_lr, max_lr, step_size_up, step_size_down, mode, gamma(optional))].")
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--decay', type=float, default=0.0005)
     parser.add_argument('--max_epochs', type=int, default=20)
@@ -50,6 +56,7 @@ def parse_args():
     parser.add_argument('--num_workers', type=int, default=8)
     parser.add_argument('--eval_freq', type=int, default=1)
     parser.add_argument('--eval_on_train', default=False, action='store_true')
+    parser.add_argument('--save_all_weights', default=False, action='store_true')
     parser.add_argument('--logging', default=False, action='store_true')
     
     args = parser.parse_args()
