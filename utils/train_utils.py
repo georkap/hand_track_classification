@@ -12,10 +12,10 @@ Functions that are used in training the network.
 """
 
 import numpy as np
-import torch.optim.optimizer as Optimizer
-import torch.optim.lr_scheduler._LRScheduler
+from torch.optim.optimizer import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 
-class CyclicLR(torch.optim.lr_scheduler._LRScheduler):
+class CyclicLR(_LRScheduler):
     """Sets the learning rate of each parameter group according to
     cyclical learning rate policy (CLR). The policy cycles the learning
     rate between two boundaries with a constant frequency, as detailed in

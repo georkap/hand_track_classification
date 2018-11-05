@@ -48,8 +48,9 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         losses.update(loss.item(), inputs.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
-        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
-                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg), log_file)
+        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                lr_scheduler.get_lr()[0] if lr_scheduler is not None else 0.), log_file)
 
 def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
@@ -126,22 +127,6 @@ def main():
     optimizer = torch.optim.SGD(params_to_update,
                                 lr=args.lr, momentum=args.momentum, weight_decay=args.decay)
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
-    
-#    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
-    if args.lr_type == 'step':
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                       step_size=int(args.lr_steps[0]),
-                                                       gamma=float(args.lr_steps[1]))
-    elif args.lr_type == 'multistep':
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                            milestones=[int(x) for x in args.lr_steps[:-1]],
-                                                            gamma=float(args.lr_steps[-1]))
-    elif args.lr_type == 'clr':
-        lr_scheduler = CyclicLR(optimizer, base_lr=float(args.lr_steps[0]), 
-                                max_lr=float(args.lr_steps[1]), step_size_up=int(args.lr_steps[2]),
-                                step_size_down=int(args.lr_steps[3]), mode=str(args.lr_steps[4]),
-                                gamma=float(args.lr_steps[5]))
-
 
     normalize = transforms.Normalize(mean=mean, std=std)
 
@@ -161,12 +146,29 @@ def main():
     test_loader = DatasetLoader(test_list, test_transforms, args.channels)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
+#    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
+    if args.lr_type == 'step':
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                       step_size=int(args.lr_steps[0]),
+                                                       gamma=float(args.lr_steps[1]))
+    elif args.lr_type == 'multistep':
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                            milestones=[int(x) for x in args.lr_steps[:-1]],
+                                                            gamma=float(args.lr_steps[-1]))
+    elif args.lr_type == 'clr':
+        lr_scheduler = CyclicLR(optimizer, base_lr=float(args.lr_steps[0]), 
+                                max_lr=float(args.lr_steps[1]), step_size_up=int(args.lr_steps[2])*len(train_iterator),
+                                step_size_down=int(args.lr_steps[3])*len(train_iterator), mode=str(args.lr_steps[4]),
+                                gamma=float(args.lr_steps[5]))
+
     new_top1, top1 = 0.0, 0.0
     isbest = False
     for epoch in range(args.max_epochs):
-        if args.lr_type is not 'clr':
+        if args.lr_type != 'clr':
             lr_scheduler.step()
-        train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
+            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
+        else:
+            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
                 test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
