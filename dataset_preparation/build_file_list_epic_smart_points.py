@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 25 14:10:38 2018
+Created on Tue Nov  6 13:58:16 2018
 
-Make lists for hand activity classification based on the epic kitchens splits
+Make lists for hand activity classification based on the epic kitchens splits for track points
 
 @author: Γιώργος
 """
+
 import os
 
 unavailable = [9, 11, 18]
@@ -19,12 +20,12 @@ for i in range(28):
     split_4[available_pids[i]] = "train" if i > 6 else "val"
 split_dicts = [split_1, split_2, split_3, split_4]
 
-BASE_DIR = r"..\hand_detection_track_images"
+BASE_DIR = r"..\hand_detection_tracks"
 SPLITS_DIR = r"..\splits"
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
-train_names = [os.path.join(SPLITS_DIR, "hand_track_train_{}.txt".format(i)) for i in range(1,5)]
-val_names = [os.path.join(SPLITS_DIR, "hand_track_val_{}.txt".format(i)) for i in range(1,5)]
+train_names = [os.path.join(SPLITS_DIR, "hand_locs_train_{}.txt".format(i)) for i in range(1,5)]
+val_names = [os.path.join(SPLITS_DIR, "hand_locs_val_{}.txt".format(i)) for i in range(1,5)]
 
 train_files = []
 val_files = []

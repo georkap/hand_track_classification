@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Oct 25 13:57:09 2018
+Created on Tue Nov  6 16:19:35 2018
 
-training on the hand images using resnet
+Training on the hand locations using resnet
 
 @author: Γιώργος
 """
@@ -15,7 +15,7 @@ import cv2
 from models.resnet_zoo import resnet_loader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import DatasetLoader, WidthCrop, Identity, RandomHorizontalFlip, Resize, ResizePadFirst, To01Range
+from utils.dataset_loader import PointDatasetLoader, To01Range
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
@@ -75,14 +75,8 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
-meanRGB=[0.485, 0.456, 0.406]
-stdRGB=[0.229, 0.224, 0.225]
 meanG = [0.5]
 stdG = [1.]
-
-interpolation_methods = {'linear':cv2.INTER_LINEAR, 'cubic':cv2.INTER_CUBIC,
-                         'nn':cv2.INTER_NEAREST, 'area':cv2.INTER_AREA,
-                         'lanc':cv2.INTER_LANCZOS4, 'linext':cv2.INTER_LINEAR_EXACT}
 
 def main():
     args = parse_args()
@@ -90,8 +84,8 @@ def main():
     
     base_output_dir = args.base_output_dir
     model_name = args.model_name
-    train_list = args.train_list # r'splits\hand_track_train_1.txt'
-    test_list = args.test_list # r'splits\hand_track_val_1.txt'
+    train_list = args.train_list # r'splits\hand_tracks\hand_locs_train_1.txt'
+    test_list = args.test_list # r'splits\hand_tracks\hand_locs_val_1.txt'
     
     output_dir = os.path.join(base_output_dir, model_name)
     if not os.path.exists(output_dir):
@@ -103,13 +97,10 @@ def main():
         
     print_model_config(args, log_file)
     
-    mean = meanRGB if args.channels == 'RGB' else meanG
-    std = stdRGB if args.channels == 'RGB' else stdG
+    mean = meanG
+    std = stdG
 
-    model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, 
-                             args.feature_extraction, args.resnet_version, 
-                             1 if args.channels == 'G' else 3,
-                             args.no_resize)
+    model_ft = resnet_loader(verb_classes, args.dropout, args.pretrained, args.feature_extraction, args.resnet_version, args.channels) # 120, True, False
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
@@ -132,24 +123,15 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
 
     normalize = transforms.Normalize(mean=mean, std=std)
-
-    if args.no_resize:
-        resize = WidthCrop()
-    else:
-        if args.pad:
-            resize = ResizePadFirst(224, False, interpolation_methods[args.inter]) # currently set this binarize to False, because it is false duh
-        else:
-            resize = Resize((224,224), False, interpolation_methods[args.inter])
     
-    train_transforms = transforms.Compose([resize, 
-                                           RandomHorizontalFlip(), To01Range(args.bin_img),
+    train_transforms = transforms.Compose([To01Range(args.bin_img),
                                            transforms.ToTensor(), normalize])
-    train_loader = DatasetLoader(train_list, train_transforms, args.channels)
+    train_loader = PointDatasetLoader(train_list, train_transforms, args.channels)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
-    test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
+    test_transforms = transforms.Compose([To01Range(args.bin_img),
                                           transforms.ToTensor(), normalize])
-    test_loader = DatasetLoader(test_list, test_transforms, args.channels)
+    test_loader = PointDatasetLoader(test_list, test_transforms, args.channels)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
 #    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])

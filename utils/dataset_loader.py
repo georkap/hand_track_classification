@@ -8,6 +8,7 @@ Image dataset loader for a .txt file with a sample per line in the format
 @author: Γιώργος
 """
 
+import pickle
 import cv2
 import numpy as np
 import torch.utils.data
@@ -15,6 +16,11 @@ import torchvision.transforms
 
 def parse_samples_list(list_file):
     return [ImageData(x.strip().split(' ')) for x in open(list_file)]
+
+def load_pickle(tracks_path):
+    with open(tracks_path,'rb') as f:
+        tracks = pickle.load(f)
+    return tracks
 
 class ImageData(object):
 
@@ -58,6 +64,30 @@ class DatasetLoader(torch.utils.data.Dataset):
             img = self.transform(img)
 
         return img, self.samples_list[index].label_verb
+
+class PointDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, batch_transform=None):
+        self.samples_list = parse_samples_list(list_file)
+        self.transform = batch_transform
+    
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self, index):
+        points = load_pickle(self.samples_list[index].image_path).astype(np.float32)
+        
+        if self.transform is not None:
+            points = self.transform(points)
+        
+        return points, self.samples_list[index].label_verb
+
+class Identity(object):
+    def __call__(self, data):
+        return data
+    
+class WidthCrop(object):
+    def __call__(self, data):
+        return data[:, 4:-4]
 
 class RandomHorizontalFlip(object):
     """Randomly horizontally flips the given numpy array with a probability of 0.5

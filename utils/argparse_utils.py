@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument('--base_output_dir', type=str, default=r'outputs/')
     
     # Dataset parameters
+    parser.add_argument('--no_resize', default=False, action='store_true')
     parser.add_argument('--inter', type=str, default='cubic',
                         choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
     parser.add_argument('--bin_img', default=False, action='store_true')
