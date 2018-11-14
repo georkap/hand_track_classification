@@ -12,7 +12,7 @@ import pickle
 import cv2
 import numpy as np
 import torch.utils.data
-import torchvision.transforms
+
 
 def parse_samples_list(list_file):
     return [ImageData(x.strip().split(' ')) for x in open(list_file)]
@@ -66,186 +66,30 @@ class DatasetLoader(torch.utils.data.Dataset):
         return img, self.samples_list[index].label_verb
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, batch_transform=None):
+    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.]):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
+        self.norm_val = np.array(norm_val)
     
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-        points = load_pickle(self.samples_list[index].image_path).astype(np.float32)
+        hand_tracks = load_pickle(self.samples_list[index].image_path)
         
-        if self.transform is not None:
-            points = self.transform(points)
+        left_track = np.array(hand_tracks['left'], dtype=np.float32)
+        right_track = np.array(hand_tracks['right'], dtype=np.float32)
+        points = np.concatenate((left_track, right_track), -1)#.astype(np.float32)
         
-        return points, self.samples_list[index].label_verb
-
-class Identity(object):
-    def __call__(self, data):
-        return data
-    
-class WidthCrop(object):
-    def __call__(self, data):
-        return data[:, 4:-4]
-
-class RandomHorizontalFlip(object):
-    """Randomly horizontally flips the given numpy array with a probability of 0.5
-    """
-    def __init__(self):
-        self.rng = np.random.RandomState(0)
-
-    def __call__(self, data):
-        if self.rng.rand() < 0.5:
-            data = np.fliplr(data)
-            data = np.ascontiguousarray(data)
-        return data
-
-class To01Range(object):
-    def __init__(self, binarize):
-        self.binarize = binarize
-    
-    def __call__(self, data):
-        norm_image = cv2.normalize(data, None, alpha=0, beta=1, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32FC3)
-        
-        if len(norm_image.shape) == 2:
-            norm_image = np.expand_dims(norm_image, -1)
-        
-        if self.binarize: 
-            norm_image = np.where(norm_image > 0, 1., 0).astype(np.float32)
-        
-        return norm_image
-        
-class ResizePadFirst(object):
-    def __init__(self, size, binarize, interpolation=cv2.INTER_LINEAR):
-        self.size = size # int
-        self.binarize = binarize
-        self.interpolation = interpolation    
-
-    def __call__(self, data):
-        h, w, c = data.shape if len(data.shape) == 3 else (data.shape[0], data.shape[1],1)
-        
-        assert isinstance(self.size, int)
-        
-        largest = w if w > h else h
-        delta_w = largest - w
-        delta_h = largest - h
-        
-        top, bottom = delta_h//2, delta_h - delta_h//2
-        left, right = delta_w//2, delta_w - delta_w//2
-        color = [0] * c
-        
-        padded_data = cv2.copyMakeBorder(data, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-              
-        scaled_data = cv2.resize(padded_data, (self.size, self.size), interpolation=self.interpolation)
-        
-        if self.binarize: 
-            scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
-        
-        return scaled_data
-
-
-class ResizeZeroPad(object):
-    """ Rescales the input numpy array to the given 'size'
-    and zero pads to fill the greater dimension. 
-    For example, if height > width, the image will be 
-    rescaled to height == size and the remaining values of
-    width will be zeros. 
-    """
-    def __init__(self, size, interpolation=cv2.INTER_LINEAR):
-        self.size = size # int
-        self.interpolation = interpolation
-    
-    def __call__(self, data):
-        h, w, c = data.shape if len(data.shape) == 3 else (data.shape[0], data.shape[1],1)
-        
-        assert isinstance(self.size, int)
-        
-        if w < h:
-            new_w = int(self.size * w / h)
-            new_h = self.size
-        else:
-            new_w = self.size
-            new_h = int(self.size * h / w)
-            
-        if (h != new_h) or (w != new_w):
-            scaled_data = cv2.resize(data, (new_w, new_h), interpolation=self.interpolation)
-        else:
-            scaled_data = data
-            
-        delta_w = self.size - new_w
-        delta_h = self.size - new_h
-        top, bottom = delta_h//2, delta_h - delta_h//2
-        left, right = delta_w//2, delta_w - delta_w//2
-        
-        color = [0] * c
-        
-        padded_data = cv2.copyMakeBorder(scaled_data, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-        
-        return padded_data
-
-class Resize(object):
-    """ Rescales the input numpy array to the given 'size'.
-    'size' will be the size of the smaller edge.
-    For example, if height > width, then image will be
-    rescaled to (size * height / width, size)
-    size: size of the smaller edge
-    interpolation: Default: cv2.INTER_LINEAR
-    """
-    def __init__(self, size, binarize, interpolation=cv2.INTER_LINEAR):
-        self.size = size # [w, h]
-        self.binarize = binarize
-        self.interpolation = interpolation
-
-    def __call__(self, data):
-        h, w, c = data.shape if len(data.shape) == 3 else (data.shape[0], data.shape[1],1)
-
-        if isinstance(self.size, int):
-            slen = self.size
-            if min(w, h) == slen:
-                return data
-            if w < h:
-                new_w = self.size
-                new_h = int(self.size * h / w)
-            else:
-                new_w = int(self.size * w / h)
-                new_h = self.size
-        else:
-            new_w = self.size[0]
-            new_h = self.size[1]
-
-        if (h != new_h) or (w != new_w):
-            scaled_data = cv2.resize(data, (new_w, new_h), interpolation=self.interpolation)
-        else:
-            scaled_data = data
-
-        if self.binarize: 
-            scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
-
-        return scaled_data
-
-class RandomCrop(object):
-    """Crops the given numpy array at the random location to have a region of
-    the given size. size can be a tuple (target_height, target_width)
-    or an integer, in which case the target will be of a square shape (size, size)
-    """
-    def __init__(self, size):
-        if isinstance(size, int):
-            self.size = (size, size)
-        else:
-            self.size = size
-        self.rng = np.random.RandomState(0)
-
-    def __call__(self, data):
-        h, w, c = data.shape
-        th, tw = self.size
-        x1 = self.rng.choice(range(w - tw))
-        y1 = self.rng.choice(range(h - th))
-        cropped_data = data[y1:(y1+th), x1:(x1+tw), :]
-        return cropped_data
+        points /= self.norm_val
+#        points = torch.from_numpy(points)
+        return points, len(points), self.samples_list[index].label_verb
     
     
 if __name__=='__main__':
+    
+    from dataset_loader_utils import Resize, ResizePadFirst
+    
     image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
 
     resize_only = Resize((224,224), False, cv2.INTER_CUBIC)

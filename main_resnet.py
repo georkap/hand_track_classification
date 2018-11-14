@@ -15,7 +15,8 @@ import cv2
 from models.resnet_zoo import resnet_loader
 import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import DatasetLoader, WidthCrop, Identity, RandomHorizontalFlip, Resize, ResizePadFirst, To01Range
+from utils.dataset_loader import DatasetLoader
+from utils.dataset_loader_utils import WidthCrop, RandomHorizontalFlip, Resize, ResizePadFirst, To01Range
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
