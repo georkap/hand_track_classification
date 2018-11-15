@@ -47,7 +47,7 @@ def parse_args():
                         help="The value of lr_steps depends on lr_type. If lr_type is:"\
                             +"'step' then lr_steps is a list of size 2 that contains the number of epochs needed to reduce the lr at lr_steps[0] and the gamma to reduce by, at lr_steps[1]."\
                             +"'multistep' then lr_steps is a list of size n+1 for n number of learning rate decreases and the gamma to reduce by at lr_steps[-1]."\
-                            +"'clr' then lr_steps is a list of size 6: [base_lr, max_lr, num_epochs_up, num_epochs_down, mode, gamma].")
+                            +"'clr' then lr_steps is a list of size 6: [base_lr, max_lr, num_epochs_up, num_epochs_down, mode, gamma]. In the clr case, argument 'lr' is ignored.")
     parser.add_argument('--momentum', type=float, default=0.9)
     parser.add_argument('--decay', type=float, default=0.0005)
     parser.add_argument('--max_epochs', type=int, default=20)

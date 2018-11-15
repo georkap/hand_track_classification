@@ -12,7 +12,6 @@ import time
 import shutil
 import torch
 from models.lstm_hands import LSTM_Hands
-import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 from utils.dataset_loader import PointDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
@@ -21,17 +20,19 @@ from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, print_model_config
 from utils.train_utils import CyclicLR
 
-def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler=None):
+def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
     
     print_and_save('*********', log_file)
     print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
     t0 = time.time()
     for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
-        if lr_scheduler is not None:
-            lr_scheduler.step()
-            
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()    
         
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         targets = torch.tensor(targets).cuda()
@@ -53,18 +54,20 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         t0 = time.time()
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
-                lr_scheduler.get_lr()[0] if lr_scheduler is not None else 0.), log_file)
+                lr_scheduler.get_lr()[0]), log_file)
 
 def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
         print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
-        for batch_idx, (inputs, targets) in enumerate(test_iterator):
+        for batch_idx, (inputs, seq_lengths, targets) in enumerate(test_iterator):
             inputs = torch.tensor(inputs).cuda()
             targets = torch.tensor(targets).cuda()
 
-            output = model(inputs)
+            inputs = inputs.transpose(1,0)
+            output = model(inputs, seq_lengths)
+            
             loss = criterion(output, targets)
 
             t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
@@ -148,11 +151,11 @@ def main():
     new_top1, top1 = 0.0, 0.0
     isbest = False
     for epoch in range(args.max_epochs):
-        if args.lr_type != 'clr':
-            lr_scheduler.step()
-            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
-        else:
-            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
+#        if args.lr_type != 'clr':
+#            lr_scheduler.step()
+#            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
+#        else:
+        train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
                 test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
