@@ -24,7 +24,6 @@ from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args_val
 from utils.file_utils import print_and_save
 
-
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
 
 def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
@@ -53,11 +52,10 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
                                   targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
                 top1.update(t1.item(), 1)
                 top5.update(t5.item(), 1)
-                losses.update(loss.item()/inputs.size(0), 1) # approximate the loss over the batch
+                losses.update(loss.item()/output.size(0), 1) # approximate the loss over the batch
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
-
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg, outputs
 
@@ -68,6 +66,7 @@ def main():
     
     ckpt_path = args.ckpt_path
     val_list = args.val_list
+    
     output_dir = os.path.dirname(ckpt_path)
 
     if args.logging:
@@ -105,7 +104,7 @@ def main():
     video_pred = [x[0] for x in outputs]
     video_labels = [x[1] for x in outputs]
 
-    cf = confusion_matrix(video_labels, video_pred).astype(float)
+    cf = confusion_matrix(video_labels, video_pred).astype(int)
 
     cls_cnt = cf.sum(axis=1)
     cls_hit = np.diag(cf)
