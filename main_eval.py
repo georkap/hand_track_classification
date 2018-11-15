@@ -49,7 +49,8 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
                 outputs.append([res, label])
                 batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
                 
-                t1, t5 = accuracy(output[j].detach().cpu(), targets[j].detach().cpu(), topk=(1,5))
+                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
+                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
                 top1.update(t1.item(), 1)
                 top5.update(t5.item(), 1)
                 losses.update(loss.item()/inputs.size(0), 1) # approximate the loss over the batch
