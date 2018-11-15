@@ -89,7 +89,7 @@ def main():
 #    model_ft.load_state_dict(base_dict) 
     model_ft.load_state_dict(checkpoint['state_dict'])
 
-    dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val)
+    dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val, validation=True)
     dataset_iterator = torch.utils.data.DataLoader(dataset_loader, 
                                                    batch_size=args.batch_size, 
                                                    num_workers=args.num_workers, 
