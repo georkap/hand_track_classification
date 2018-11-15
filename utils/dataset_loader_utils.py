@@ -231,7 +231,7 @@ def lstm_collate(batch):
     elif isinstance(batch[0], string_classes):
         return batch
     elif isinstance(batch[0], collections.Mapping):
-        return {key: my_collate([d[key] for d in batch]) for key in batch[0]}
+        return {key: lstm_collate([d[key] for d in batch]) for key in batch[0]}
     elif isinstance(batch[0], collections.Sequence):
         # get the sequence lengths for all the samples of the batch
         seq_lengths = np.array([batch[i][1] for i in range(len(batch))])
@@ -240,9 +240,14 @@ def lstm_collate(batch):
         padded_inputs = np.zeros((len(batch), seq_lengths[order_desc][0], len(batch[0][0][0])), dtype=np.float32)
         padded_batch = []
         for i, order in enumerate(order_desc):
-            inputs, seq_length, target = batch[order]
-            padded_inputs[i, :seq_length, :] = inputs
-            padded_batch.append((padded_inputs[i], seq_length, target))
+#            inputs, seq_length, target = batch[order]
+#            padded_inputs[i, :seq_length, :] = inputs
+            padded_inputs[i, :batch[order][1], :] = batch[order][0]
+            if len(batch[order]) == 4:
+                appendable = (padded_inputs[i], batch[order][1], batch[order][2], batch[order][3])
+            else:
+                appendable = (padded_inputs[i], batch[order][1], batch[order][2])
+            padded_batch.append(appendable)
         
         transposed = zip(*padded_batch)
         collated = []
