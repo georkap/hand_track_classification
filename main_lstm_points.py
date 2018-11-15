@@ -102,7 +102,6 @@ def main():
         
     print_model_config(args, log_file)
 
-    # 120, 0.5, True, False, '18', 
     model_ft = LSTM_Hands(4, args.lstm_hidden, args.lstm_layers, verb_classes)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)

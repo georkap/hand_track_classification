@@ -66,10 +66,11 @@ class DatasetLoader(torch.utils.data.Dataset):
         return img, self.samples_list[index].label_verb
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.]):
+    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.], validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
+        self.validation = validation
     
     def __len__(self):
         return len(self.samples_list)
@@ -79,11 +80,14 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
-        points = np.concatenate((left_track, right_track), -1)#.astype(np.float32)
+        points = np.concatenate((left_track, right_track), -1)
         
         points /= self.norm_val
-#        points = torch.from_numpy(points)
-        return points, len(points), self.samples_list[index].label_verb
+        if not self.validation:
+            return points, len(points), self.samples_list[index].label_verb
+        else:
+            name_parts = self.samples_list[index].image_path.split("\\")
+            return points, len(points), self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
     
     
 if __name__=='__main__':

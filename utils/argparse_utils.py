@@ -9,6 +9,29 @@ argparse utils
 
 import argparse
 
+def parse_args_val():
+    parser = argparse.ArgumentParser(description='Hand activity recognition - validation')
+    
+    # Load the necessary paths
+    parser.add_argument('ckpt_path', type=str)
+    parser.add_argument('val_list', type=str)
+    
+    # Network configuration
+    parser.add_argument('--lstm_hidden', type=int, default=8)
+    parser.add_argument('--lstm_layers', type=int, default=2)
+
+    # Test parameters
+    parser.add_argument('--batch_size', type=int, default=1)
+    
+    # Program parameters
+    parser.add_argument('--gpus', nargs='+', type=int, default=[0, 1])
+    parser.add_argument('--num_workers', type=int, default=8)
+    parser.add_argument('--eval_on_train', default=False, action='store_true')
+    parser.add_argument('--logging', default=False, action='store_true')
+
+    args = parser.parse_args()
+    return args
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Hand activity recognition')
     
@@ -29,7 +52,7 @@ def parse_args():
     parser.add_argument('--bin_img', default=False, action='store_true')
     parser.add_argument('--pad', default=False, action='store_true')    
     
-    # Model parameters
+    # Network configuration
     parser.add_argument('--resnet_version', type=str, default='18', 
                         choices=['18','34','50','101','152'], 
                         help="One of 18, 34, 50, 101, 152")
