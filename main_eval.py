@@ -49,17 +49,16 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
                 outputs.append([res, label])
                 batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
                 
-
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-            top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
-            losses.update(loss.item(), inputs.size(0))
+                t1, t5 = accuracy(output[j].detach().cpu(), targets[j].detach().cpu(), topk=(1,5))
+                top1.update(t1.item(), 1)
+                top5.update(t5.item(), 1)
+                losses.update(loss.item()/inputs.size(0), 1) # approximate the loss over the batch
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
 
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
-    return top1.avg
+    return top1.avg, outputs
 
 norm_val = [456., 256., 456., 256.]
 def main():
