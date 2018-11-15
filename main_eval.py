@@ -21,7 +21,7 @@ from models.lstm_hands import LSTM_Hands
 from utils.dataset_loader import PointDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
-from utils.argparse_utils import parse_args
+from utils.argparse_utils import parse_args_val
 from utils.file_utils import print_and_save
 
 
@@ -63,7 +63,7 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
 
 norm_val = [456., 256., 456., 256.]
 def main():
-    args = parse_args()
+    args = parse_args_val()
     verb_classes = 120
     
     ckpt_path = args.ckpt_path

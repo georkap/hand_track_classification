@@ -26,7 +26,6 @@ def parse_args_val():
     # Program parameters
     parser.add_argument('--gpus', nargs='+', type=int, default=[0, 1])
     parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--eval_on_train', default=False, action='store_true')
     parser.add_argument('--logging', default=False, action='store_true')
 
     args = parser.parse_args()
