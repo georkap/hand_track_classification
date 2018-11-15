@@ -131,9 +131,8 @@ def main():
 
 #    test_transforms = transforms.Compose([torch.from_numpy])
     test_loader = PointDatasetLoader(test_list, norm_val=norm_val)
-    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
+    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 
-#    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
     if args.lr_type == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                        step_size=int(args.lr_steps[0]),
@@ -151,10 +150,6 @@ def main():
     new_top1, top1 = 0.0, 0.0
     isbest = False
     for epoch in range(args.max_epochs):
-#        if args.lr_type != 'clr':
-#            lr_scheduler.step()
-#            train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file)
-#        else:
         train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
