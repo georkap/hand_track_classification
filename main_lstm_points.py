@@ -12,8 +12,9 @@ import time
 import shutil
 import torch
 from models.lstm_hands import LSTM_Hands
+from models.lstm_hands_enc_dec import LSTM_Hands_encdec
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import PointDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointImageDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
@@ -34,10 +35,15 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         if isinstance(lr_scheduler, CyclicLR):
             lr_scheduler.step()    
         
+        # for multilstm test
+        inputs.squeeze_(0)
+        inputs.transpose_(1,2)
+        inputs.transpose_(0,1)
+        
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         targets = torch.tensor(targets).cuda()
 
-        inputs = inputs.transpose(1,0)
+#        inputs = inputs.transpose(1, 0)
         output = model(inputs, seq_lengths)
 
         loss = criterion(output, targets)
@@ -81,8 +87,6 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
-norm_val = [456., 256., 456., 256.]
-
 def main():
     args = parse_args()
     verb_classes = 120
@@ -100,9 +104,15 @@ def main():
     else:
         log_file = None
         
+    if args.no_norm_input:
+        norm_val = [1., 1., 1., 1.]
+    else:
+        norm_val = [456., 256., 456., 256.]
+        
     print_model_config(args, log_file)
 
-    model_ft = LSTM_Hands(4, args.lstm_hidden, args.lstm_layers, verb_classes)
+#    model_ft = LSTM_Hands(4, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
+    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
@@ -125,12 +135,16 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
     
 #    train_transforms = transforms.Compose([torch.from_numpy])
-    train_loader = PointDatasetLoader(train_list, norm_val=norm_val)
-    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
+#    train_loader = PointDatasetLoader(train_list, norm_val=norm_val)
+#    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
+    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)
+    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
 #    test_transforms = transforms.Compose([torch.from_numpy])
-    test_loader = PointDatasetLoader(test_list, norm_val=norm_val)
-    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
+#    test_loader = PointDatasetLoader(test_list, norm_val=norm_val)
+#    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
+    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
+    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
     if args.lr_type == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,

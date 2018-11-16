@@ -25,6 +25,7 @@ from utils.argparse_utils import parse_args_val
 from utils.file_utils import print_and_save
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+torch.set_printoptions(linewidth=1000000, threshold=1000000)
 
 def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
@@ -52,7 +53,7 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
                                   targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
                 top1.update(t1.item(), 1)
                 top5.update(t5.item(), 1)
-                losses.update(loss.item()/output.size(0), 1) # approximate the loss over the batch
+            losses.update(loss.item(), output.size(0))
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)

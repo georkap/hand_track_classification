@@ -66,7 +66,8 @@ class DatasetLoader(torch.utils.data.Dataset):
         return img, self.samples_list[index].label_verb
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.], validation=False):
+    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.], 
+                 validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
@@ -88,8 +89,50 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         else:
             name_parts = self.samples_list[index].image_path.split("\\")
             return points, len(points), self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
+
+class PointImageDatasetLoader(torch.utils.data.Dataset):
+    sum_seq_size = 0
+    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.],
+                 validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        self.transform = batch_transform
+        self.norm_val = np.array(norm_val)
+        self.validation = validation
     
+    def __len__(self):
+        return len(self.samples_list)
+
+    def __getitem__(self, index):
+        hand_tracks = load_pickle(self.samples_list[index].image_path)
+        left_track = np.array(hand_tracks['left'], dtype=np.int)
+        right_track = np.array(hand_tracks['right'], dtype=np.int)
     
+        seq_size = len(left_track)
+#        print(seq_size)
+        self.sum_seq_size += seq_size
+        print(self.sum_seq_size)
+        point_imgs = np.zeros([385, 456, seq_size], dtype=np.float32)
+        
+        
+        for i in range(seq_size):
+            intensities = np.linspace(1., 0., i+1)[::-1]
+            point_imgs[left_track[:i+1,1], left_track[:i+1,0], i] = intensities
+            point_imgs[right_track[:i+1,1], right_track[:i+1,0], i] = intensities
+        
+#        for i in range(seq_size):
+#            for j in range(i+1):
+#                xl, yl = left_track[j]
+#                xr, yr = right_track[j]
+#                if xl < 456 and yl < 256:
+#                    point_imgs[int(yl), int(xl), i] = (j+1)/(i+1)    
+#                if xr < 456 and yr < 256:
+#                    point_imgs[int(yr), int(xr), i] = (j+1)/(i+1)
+#                cv2.imshow('1', point_imgs[:,:,i])
+#                cv2.waitKey(5)
+#        cv2.waitKey(0)
+        
+        return point_imgs[:256, :, :], seq_size, self.samples_list[index].label_verb
+        
 if __name__=='__main__':
     
     from dataset_loader_utils import Resize, ResizePadFirst

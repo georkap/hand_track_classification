@@ -21,6 +21,7 @@ def parse_args_val():
     parser.add_argument('--lstm_layers', type=int, default=2)
 
     # Test parameters
+    parser.add_argument('--no_norm_input', default=False, action='store_true', help='lstm')
     parser.add_argument('--batch_size', type=int, default=1)
     
     # Program parameters
@@ -50,6 +51,7 @@ def parse_args():
                         choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
     parser.add_argument('--bin_img', default=False, action='store_true')
     parser.add_argument('--pad', default=False, action='store_true')    
+    parser.add_argument('--no_norm_input', default=False, action='store_true', help='lstm')
     
     # Network configuration
     parser.add_argument('--resnet_version', type=str, default='18', 
