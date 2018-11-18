@@ -17,10 +17,20 @@ def parse_args_val():
     parser.add_argument('val_list', type=str)
     
     # Network configuration
+    parser.add_argument('--resnet_version', type=str, default=None, 
+                        choices=['18','34','50','101','152'], 
+                        help="One of 18, 34, 50, 101, 152")
+    parser.add_argument('--channels', default=None, choices=['RGB', 'G'], 
+                        help="optional to train on one input channel with binary inputs.")
     parser.add_argument('--lstm_hidden', type=int, default=8)
     parser.add_argument('--lstm_layers', type=int, default=2)
 
-    # Test parameters
+    # Dataset parameters
+    parser.add_argument('--no_resize', default=False, action='store_true')
+    parser.add_argument('--inter', type=str, default='cubic',
+                        choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
+    parser.add_argument('--bin_img', default=False, action='store_true')
+    parser.add_argument('--pad', default=False, action='store_true')    
     parser.add_argument('--no_norm_input', default=False, action='store_true', help='lstm')
     parser.add_argument('--batch_size', type=int, default=1)
     

@@ -46,10 +46,11 @@ class ImageData(object):
 class DatasetLoader(torch.utils.data.Dataset):
 
     def __init__(self, list_file,
-                 batch_transform=None, channels='RGB' ):
+                 batch_transform=None, channels='RGB', validation=False ):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
         self.channels = channels
+        self.validation = validation
         self.image_read_type = cv2.IMREAD_COLOR if channels=='RGB' else cv2.IMREAD_GRAYSCALE
 
     def __len__(self):
@@ -63,7 +64,11 @@ class DatasetLoader(torch.utils.data.Dataset):
         if self.transform is not None:
             img = self.transform(img)
 
-        return img, self.samples_list[index].label_verb
+        if not self.validation:
+            return img, self.samples_list[index].label_verb
+        else:
+            name_parts = self.samples_list[index].image_path.split("\\")
+            return img, self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.], 

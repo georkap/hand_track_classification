@@ -57,7 +57,7 @@ def resnet_loader(num_classes, dropout, pretrained, feature_extraction, version,
         model_ft.conv1 = nn.Sequential(*modules)
     else:
         if channels != 3:
-            model_ft.conv1 == nn.Conv2d(channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+            model_ft.conv1 = nn.Conv2d(channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
 
     num_ftrs = model_ft.fc.in_features
     model_ft.fc = nn.Sequential(nn.Dropout(p=dropout),
