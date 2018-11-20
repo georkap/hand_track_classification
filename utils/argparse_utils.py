@@ -75,6 +75,7 @@ def parse_args():
     
     # Training parameters
     parser.add_argument('--dropout', type=float, default=0.5)
+    parser.add_argument('--mixup_a', type=float, default=1)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--lr_type', type=str, default='step',
