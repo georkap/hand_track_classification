@@ -21,7 +21,7 @@ import torchvision.transforms as transforms
 
 from models.resnet_zoo import resnet_loader
 from models.lstm_hands import LSTM_Hands
-from utils.dataset_loader import DatasetLoader, PointDatasetLoader
+from utils.dataset_loader import DatasetLoader, PointDatasetLoader, PointVectorSummedDatasetLoader
 from utils.dataset_loader_utils import WidthCrop, Resize, ResizePadFirst, To01Range
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
@@ -146,7 +146,8 @@ def main():
         validate = validate_resnet
     else:        
         model_ft = LSTM_Hands(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, 0)
-        dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val, validation=True)
+#        dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val, validation=True)
+        dataset_loader = PointVectorSummedDatasetLoader(val_list, validation=True)
         collate_fn = lstm_collate
         validate = validate_lstm
     model_ft = torch.nn.DataParallel(model_ft).cuda()
