@@ -145,7 +145,7 @@ def main():
         collate_fn = torch.utils.data.dataloader.default_collate
         validate = validate_resnet
     else:        
-        model_ft = LSTM_Hands(4, args.lstm_hidden, args.lstm_layers, verb_classes)
+        model_ft = LSTM_Hands(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, 0)
         dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val, validation=True)
         collate_fn = lstm_collate
         validate = validate_lstm

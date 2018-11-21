@@ -22,6 +22,7 @@ def parse_args_val():
                         help="One of 18, 34, 50, 101, 152")
     parser.add_argument('--channels', default=None, choices=['RGB', 'G'], 
                         help="optional to train on one input channel with binary inputs.")
+    parser.add_argument('--lstm_input', type=int, default=4)
     parser.add_argument('--lstm_hidden', type=int, default=8)
     parser.add_argument('--lstm_layers', type=int, default=2)
 
@@ -67,6 +68,7 @@ def parse_args():
     parser.add_argument('--resnet_version', type=str, default='18', 
                         choices=['18','34','50','101','152'], 
                         help="One of 18, 34, 50, 101, 152")
+    parser.add_argument('--lstm_input', type=int, default=4)
     parser.add_argument('--lstm_hidden', type=int, default=8)
     parser.add_argument('--lstm_layers', type=int, default=2)
     parser.add_argument('--pretrained', default=False, action='store_true')
