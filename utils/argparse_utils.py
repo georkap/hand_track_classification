@@ -27,6 +27,7 @@ def parse_args_val():
     parser.add_argument('--lstm_layers', type=int, default=2)
 
     # Dataset parameters
+    parser.add_argument('--verb_classes', type=int, default=120)
     parser.add_argument('--no_resize', default=False, action='store_true')
     parser.add_argument('--inter', type=str, default='cubic',
                         choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
@@ -57,6 +58,7 @@ def parse_args():
     parser.add_argument('--base_output_dir', type=str, default=r'outputs/')
     
     # Dataset parameters
+    parser.add_argument('--verb_classes', type=int, default=120)
     parser.add_argument('--no_resize', default=False, action='store_true')
     parser.add_argument('--inter', type=str, default='cubic',
                         choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])

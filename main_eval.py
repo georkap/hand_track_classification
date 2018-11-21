@@ -108,7 +108,7 @@ def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_fil
 norm_val = [456., 256., 456., 256.]
 def main():
     args = parse_args_val()
-    verb_classes = 120
+    verb_classes = args.verb_classes
     
     ckpt_path = args.ckpt_path
     val_list = args.val_list
