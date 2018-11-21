@@ -149,7 +149,7 @@ def main():
 #    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
 #    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
     test_loader = PointVectorSummedDatasetLoader(test_list)
-    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)
+    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 
 
     if args.lr_type == 'step':
