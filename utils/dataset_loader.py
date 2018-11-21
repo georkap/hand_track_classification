@@ -119,7 +119,7 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
                 vec[:i, x] += 1
                 vec[:i, 456+y] += 1
                 
-        class_id = 0 if self.samples_list[index].label_verb==5 else 6
+        class_id = 0 if self.samples_list[index].label_verb==5 else 1
         if not self.validation:
             return vec, seq_size, class_id
         else:
