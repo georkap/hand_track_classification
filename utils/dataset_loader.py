@@ -95,6 +95,37 @@ class PointDatasetLoader(torch.utils.data.Dataset):
             name_parts = self.samples_list[index].image_path.split("\\")
             return points, len(points), self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
 
+class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        self.validation = validation
+        
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self, index):
+        hand_tracks = load_pickle(self.samples_list[index].image_path)
+        left_track = np.array(hand_tracks['left'], dtype=np.int)
+        right_track = np.array(hand_tracks['right'], dtype=np.int)   
+        seq_size = len(left_track)
+        
+        vec = np.zeros((seq_size, 456+256), dtype=np.float32)
+        for i, (x, y) in enumerate(left_track):
+            if y < 256:
+                vec[:i, x] += 1
+                vec[:i, 456+y] += 1
+        for i, (x, y) in enumerate(right_track):
+            if y < 256:
+                vec[:i, x] += 1
+                vec[:i, 456+y] += 1
+                
+        if not self.validation:
+            return vec, seq_size, self.samples_list[index].label_verb
+        else:
+            name_parts = self.samples_list[index].image_path.split("\\")
+            return vec, seq_size, self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
+                
+
 class PointImageDatasetLoader(torch.utils.data.Dataset):
     sum_seq_size = 0
     def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.],
