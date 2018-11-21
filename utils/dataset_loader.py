@@ -119,11 +119,12 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
                 vec[:i, x] += 1
                 vec[:i, 456+y] += 1
                 
+        class_id = 0 if self.samples_list[index].label_verb==5 else 6
         if not self.validation:
-            return vec, seq_size, self.samples_list[index].label_verb
+            return vec, seq_size, class_id
         else:
             name_parts = self.samples_list[index].image_path.split("\\")
-            return vec, seq_size, self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
+            return vec, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
                 
 
 class PointImageDatasetLoader(torch.utils.data.Dataset):

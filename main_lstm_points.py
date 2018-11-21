@@ -52,9 +52,10 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         loss.backward()
         optimizer.step()
 
-        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+#        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
         top1.update(t1.item(), inputs.size(0))
-        top5.update(t5.item(), inputs.size(0))
+#        top5.update(t5.item(), inputs.size(0))
         losses.update(loss.item(), inputs.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
@@ -76,9 +77,10 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             
             loss = criterion(output, targets)
 
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+#            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
             top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
+#            top5.update(t5.item(), inputs.size(0))
             losses.update(loss.item(), inputs.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
@@ -112,7 +114,7 @@ def main():
     print_model_config(args, log_file)
 
 #    model_ft = LSTM_Hands(4, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
-    model_ft = LSTM_Hands(456+256, 800, 2, verb_classes, 0)
+    model_ft = LSTM_Hands(456+256, 800, 2, 2, 0)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
@@ -148,7 +150,7 @@ def main():
 #    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 #    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
 #    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
-    test_loader = PointVectorSummedDatasetLoader(test_list)
+    test_loader = PointVectorSummedDatasetLoader(test_list, validation=True)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 
 
