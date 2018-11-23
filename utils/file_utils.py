@@ -7,6 +7,7 @@ file_utils
 @author: GEO
 """
 import os
+import pandas as pd
 
 def print_and_save(text, path):
     print(text)
@@ -73,3 +74,10 @@ def get_train_results(lines):
     
     return epochs, avg_loss, avg_t1, avg_t5
 
+def make_plot_dataframe(np_columns, str_columns, title, file):
+    df = pd.DataFrame(data=np_columns, columns=str_columns)
+    plot = df.plot(title=title).legend(loc='lower left')
+    fig=plot.get_figure()
+    fig.savefig(file)
+    
+    return df

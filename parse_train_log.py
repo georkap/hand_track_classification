@@ -9,18 +9,9 @@ train_log parser to graphs
 
 import os
 import numpy as np
-import pandas as pd
 
 from utils.argparse_utils import parse_args_train_log_file
-from utils.file_utils import get_eval_results, get_train_results
-
-def make_plot_dataframe(np_columns, str_columns, title, file):
-    df = pd.DataFrame(data=np_columns, columns=str_columns)
-    plot = df.plot(title=title)
-    fig=plot.get_figure()
-    fig.savefig(file)
-    
-    return df
+from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe
 
 args = parse_args_train_log_file() #--train_log_path
 LOG_FILE = args.train_log_path

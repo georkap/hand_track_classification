@@ -21,18 +21,9 @@ and when possible
 """
 
 import os
-import pandas as pd
 import numpy as np
 from utils.argparse_utils import parse_args_train_log_dir
-from utils.file_utils import get_eval_results, get_train_results
-
-def make_plot_dataframe(np_columns, str_columns, title, file):
-    df = pd.DataFrame(data=np_columns, columns=str_columns)
-    plot = df.plot(title=title)
-    fig=plot.get_figure()
-    fig.savefig(file)
-    
-    return df
+from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe
 
 args = parse_args_train_log_dir() #--train_log_dir
 LOG_DIR = args.train_log_dir
