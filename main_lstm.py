@@ -10,6 +10,7 @@ Training on the hand locations using resnet
 import os
 import sys
 import time
+from datetime import datetime
 import shutil
 import torch
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand
@@ -101,7 +102,10 @@ def main():
     
     output_dir = os.path.join(base_output_dir, model_name)
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir)   
+        os.makedirs(output_dir)
+    else:
+        if not args.resume:
+            sys.exit("Attempted to overwrite previous folder, exiting..")
     if args.logging:
         log_file = os.path.join(base_output_dir, model_name, model_name+".txt")
     else:
@@ -125,7 +129,19 @@ def main():
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
-
+    
+    if args.resume:
+        ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
+        ckpt_name_parts = os.path.basename(ckpt_path).split(".")
+        old_ckpt_name = ""
+        for part in ckpt_name_parts[:-1]:
+            old_ckpt_name += part
+        dtm = datetime.fromtimestamp(os.path.getmtime(ckpt_path))
+        old_ckpt = os.path.join(os.path.dirname(ckpt_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
+        shutil.copyfile(ckpt_path, old_ckpt)
+        checkpoint = torch.load(ckpt_path)    
+        model_ft.load_state_dict(checkpoint['state_dict'])
+    
     params_to_update = model_ft.parameters()
     print_and_save("Params to learn:", log_file)
     for name,param in model_ft.named_parameters():

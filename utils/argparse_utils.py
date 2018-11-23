@@ -125,6 +125,7 @@ def parse_args_program(parser):
     parser.add_argument('--eval_on_train', default=False, action='store_true')
     parser.add_argument('--save_all_weights', default=False, action='store_true')
     parser.add_argument('--logging', default=False, action='store_true')
+    parser.add_argument('--resume', default=False, action='store_true')
     
     return parser
     
