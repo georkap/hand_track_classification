@@ -236,17 +236,23 @@ def lstm_collate(batch):
         # get the sequence lengths for all the samples of the batch
         seq_lengths = np.array([batch[i][1] for i in range(len(batch))])
         order_desc = np.argsort(seq_lengths)[::-1]
+        max_seq_size = seq_lengths[order_desc][0]
+        feature_size = len(batch[0][0][0])
+#        num_times_feature = 1 if len(batch.shape)==3 else batch.shape[4]
         # sort the batch items descending according to the sequence lengths
-        padded_inputs = np.zeros((len(batch), seq_lengths[order_desc][0], len(batch[0][0][0])), dtype=np.float32)
         padded_batch = []
         for i, order in enumerate(order_desc):
-#            inputs, seq_length, target = batch[order]
-#            padded_inputs[i, :seq_length, :] = inputs
-            padded_inputs[i, :batch[order][1], :] = batch[order][0]
+#            if num_times_feature == 1:
+            padded_inputs = np.zeros((max_seq_size, feature_size), dtype=np.float32)
+#            else:
+#                padded_inputs = np.zeros((1, max_seq_size, feature_size, num_times_feature), dtype=np.float32)
+                
+            padded_inputs[:batch[order][1], :] = batch[order][0]
+                
             if len(batch[order]) == 4:
-                appendable = (padded_inputs[i], batch[order][1], batch[order][2], batch[order][3])
+                appendable = (padded_inputs, batch[order][1], batch[order][2], batch[order][3])
             else:
-                appendable = (padded_inputs[i], batch[order][1], batch[order][2])
+                appendable = (padded_inputs, batch[order][1], batch[order][2])
             padded_batch.append(appendable)
         
         transposed = zip(*padded_batch)

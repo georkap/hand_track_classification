@@ -8,17 +8,18 @@ Training on the hand locations using resnet
 """
 
 import os
+import sys
 import time
 import shutil
 import torch
-from models.lstm_hands import LSTM_Hands
-from models.lstm_hands_enc_dec import LSTM_Hands_encdec
+from models.lstm_hands import LSTM_Hands, LSTM_per_hand
+#from models.lstm_hands_enc_dec import LSTM_Hands_encdec
 import torch.backends.cudnn as cudnn
-from utils.dataset_loader import PointDatasetLoader, PointImageDatasetLoader, PointVectorSummedDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
-from utils.file_utils import print_and_save, print_model_config
+from utils.file_utils import print_and_save
 from utils.train_utils import CyclicLR
 
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
@@ -52,10 +53,10 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         loss.backward()
         optimizer.step()
 
-#        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
+        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+#        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
         top1.update(t1.item(), inputs.size(0))
-#        top5.update(t5.item(), inputs.size(0))
+        top5.update(t5.item(), inputs.size(0))
         losses.update(loss.item(), inputs.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
@@ -77,10 +78,10 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             
             loss = criterion(output, targets)
 
-#            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
+            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+#            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
             top1.update(t1.item(), inputs.size(0))
-#            top5.update(t5.item(), inputs.size(0))
+            top5.update(t5.item(), inputs.size(0))
             losses.update(loss.item(), inputs.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
@@ -90,11 +91,11 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     return top1.avg
 
 def main():
-    args = parse_args()
+    args, model_name = parse_args('lstm', val=False)
     verb_classes = args.verb_classes
     
     base_output_dir = args.base_output_dir
-    model_name = args.model_name
+#    model_name = args.model_name
     train_list = args.train_list # r'splits\hand_tracks\hand_locs_train_1.txt'
     test_list = args.test_list # r'splits\hand_tracks\hand_locs_val_1.txt'
     
@@ -111,9 +112,15 @@ def main():
     else:
         norm_val = [456., 256., 456., 256.]
         
-    print_model_config(args, log_file)
+    print_and_save(args, log_file)
+    print_and_save("Model name: {}".format(model_name), log_file)
 
-    model_ft = LSTM_Hands(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
+    if args.lstm_dual:
+        lstm_model = LSTM_per_hand
+    else:
+        lstm_model = LSTM_Hands
+
+    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
@@ -121,37 +128,40 @@ def main():
 
     params_to_update = model_ft.parameters()
     print_and_save("Params to learn:", log_file)
-    if args.feature_extraction:
-        params_to_update = []
-        for name,param in model_ft.named_parameters():
-            if param.requires_grad == True:
-                params_to_update.append(param)
-                print_and_save("\t{}".format(name), log_file)
-    else:
-        for name,param in model_ft.named_parameters():
-            if param.requires_grad == True:
-                print_and_save("\t{}".format(name), log_file)
+    for name,param in model_ft.named_parameters():
+        if param.requires_grad == True:
+            print_and_save("\t{}".format(name), log_file)
 
     optimizer = torch.optim.SGD(params_to_update,
                                 lr=args.lr, momentum=args.momentum, weight_decay=args.decay)
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
     
-#    train_transforms = transforms.Compose([torch.from_numpy])
-#    train_loader = PointDatasetLoader(train_list, norm_val=norm_val)
-#    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
-#    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)
-#    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
-    train_loader = PointVectorSummedDatasetLoader(train_list)
-    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
+    if args.lstm_feature == "coords" or args.lstm_feature == "coords_dual":
+        if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
+            sys.exit("Clamped tracks require dual lstms and a fixed lstm sequence size.")
+        train_loader = PointDatasetLoader(train_list, max_seq_length=args.lstm_seq_size,
+                                          norm_val=norm_val, dual=args.lstm_dual,
+                                          clamp=args.lstm_clamped)
+        test_loader = PointDatasetLoader(test_list, max_seq_length=args.lstm_seq_size,
+                                         norm_val=norm_val, dual=args.lstm_dual,
+                                         clamp=args.lstm_clamped)
+    elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
+        train_loader = PointVectorSummedDatasetLoader(train_list, 
+                                                      max_seq_length=args.lstm_seq_size,
+                                                      dual=args.lstm_dual)
+        test_loader = PointVectorSummedDatasetLoader(test_list,
+                                                     max_seq_length=args.lstm_seq_size,
+                                                     dual=args.lstm_dual)
+    else:
+        sys.exit("Unsupported lstm feature")
 
-#    test_transforms = transforms.Compose([torch.from_numpy])
-#    test_loader = PointDatasetLoader(test_list, norm_val=norm_val)
-#    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
-#    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
-#    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
-    test_loader = PointVectorSummedDatasetLoader(test_list)
+    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 
+#    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)
+#    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)    
+#    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
+#    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
     if args.lr_type == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,

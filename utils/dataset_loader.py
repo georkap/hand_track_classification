@@ -71,12 +71,14 @@ class DatasetLoader(torch.utils.data.Dataset):
             return img, self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.], 
-                 validation=False):
+    def __init__(self, list_file, max_seq_length=None, batch_transform=None, norm_val=[1.,1.,1.,1.], 
+                 dual=False, clamp=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
         self.validation = validation
+        self.max_seq_length = max_seq_length
+        self.clamp = clamp
     
     def __len__(self):
         return len(self.samples_list)
@@ -85,20 +87,38 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         hand_tracks = load_pickle(self.samples_list[index].image_path)
         
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
+        left_track /= self.norm_val[:2]
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
-        points = np.concatenate((left_track, right_track), -1)
+        right_track /= self.norm_val[2:]
+        if self.clamp: # create new sequences with no zero points
+            inds = np.where(left_track[:, 1] < 1.)
+            if len(inds[0]) > 0: # in the extreme case where the hand is never in the segment we cannot clamp
+                left_track = left_track[inds]
+            inds = np.where(right_track[:, 1] < 1.)
+            if len(inds[0]) > 0: 
+                right_track = right_track[inds]
+         
+        if self.max_seq_length != 0: # indirectly supporting clamp without dual but will avoid experiments because it doesn't make much sense to combine the hand motions at different time steps
+            left_track = left_track[np.linspace(0, len(left_track), self.max_seq_length, endpoint=False, dtype=int)]
+            right_track = right_track[np.linspace(0, len(right_track), self.max_seq_length, endpoint=False, dtype=int)]
         
-        points /= self.norm_val
+        points = np.concatenate((left_track, right_track), -1)
+        seq_size = len(points)
+        
+        class_id = 0 if self.samples_list[index].label_verb==5 else 1
+        
         if not self.validation:
-            return points, len(points), self.samples_list[index].label_verb
+            return points, seq_size, class_id
         else:
             name_parts = self.samples_list[index].image_path.split("\\")
-            return points, len(points), self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
+            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, validation=False):
+    def __init__(self, list_file, max_seq_length=None, dual=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.validation = validation
+        self.max_seq_length = max_seq_length
+        self.dual = dual
         
     def __len__(self):
         return len(self.samples_list)
@@ -107,19 +127,32 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         hand_tracks = load_pickle(self.samples_list[index].image_path)
         left_track = np.array(hand_tracks['left'], dtype=np.int)
         right_track = np.array(hand_tracks['right'], dtype=np.int)   
-        seq_size = len(left_track)
         
-        vec = np.zeros((seq_size, 456+256), dtype=np.float32)
-        for i, (x, y) in enumerate(left_track):
-            if y < 256:
-                vec[:i, x] += 1
-                vec[:i, 456+y] += 1
-        for i, (x, y) in enumerate(right_track):
-            if y < 256:
-                vec[:i, x] += 1
-                vec[:i, 456+y] += 1
+        feat_size = 456+256
+        feat_addon = 0
+        if self.dual:
+            feat_addon = feat_size
+            feat_size *= 2
+            
+        vec = np.zeros((len(left_track), feat_size), dtype=np.float32)
+        for i in range(len(left_track)):
+            xl, yl = left_track[i]
+            xr, yr = right_track[i]
+            if yl < 256:
+                vec[i:, xl] += 1
+                vec[i:, 456+yl] += 1
+            if yr < 256:
+                vec[i:, feat_addon+xr] += 1
+                vec[i:, feat_addon+456+yr] += 1
+        
+        if self.max_seq_length != 0:
+            vec = vec[np.linspace(0, len(vec), self.max_seq_length, endpoint=False, dtype=int)]
+            seq_size = self.max_seq_length
+        else:
+            seq_size = len(left_track)    
                 
         class_id = 0 if self.samples_list[index].label_verb==5 else 1
+
         if not self.validation:
             return vec, seq_size, class_id
         else:

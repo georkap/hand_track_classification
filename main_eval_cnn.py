@@ -6,6 +6,8 @@ main_eval.py
 
 Used for evaluation of a model and outputs a confusion matrix, top1, top5 and per class accuracy metrics
 
+for resnet models
+
 @author: Γιώργος
 """
 
@@ -40,41 +42,6 @@ interpolation_methods = {'linear':cv2.INTER_LINEAR, 'cubic':cv2.INTER_CUBIC,
                          'nn':cv2.INTER_NEAREST, 'area':cv2.INTER_AREA,
                          'lanc':cv2.INTER_LANCZOS4, 'linext':cv2.INTER_LINEAR_EXACT}
 
-def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
-    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
-    outputs = []
-    
-    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
-    with torch.no_grad():
-        model.eval()
-        for batch_idx, (inputs, seq_lengths, targets, video_names) in enumerate(test_iterator):
-            inputs = torch.tensor(inputs).cuda()
-            targets = torch.tensor(targets).cuda()
-
-            inputs = inputs.transpose(1,0)
-            output = model(inputs, seq_lengths)            
-            loss = criterion(output, targets)
-            
-            batch_preds = []
-            for j in range(output.size(0)):
-                res = np.argmax(output[j].detach().cpu().numpy())
-                label = targets[j].cpu().numpy()
-                outputs.append([res, label])
-                batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
-                
-#                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
-#                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
-                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,2))
-                top1.update(t1.item(), 1)
-                top5.update(t5.item(), 1)
-            losses.update(loss.item(), output.size(0))
-
-            print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
-                    batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
-        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
-    return top1.avg, outputs
-
 def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     outputs = []
@@ -108,7 +75,7 @@ def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_fil
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg, outputs
 
-norm_val = [456., 256., 456., 256.]
+
 def main():
     args = parse_args_val()
     verb_classes = args.verb_classes
@@ -149,8 +116,8 @@ def main():
         validate = validate_resnet
     else:        
         model_ft = LSTM_Hands(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, 0)
-#        dataset_loader = PointDatasetLoader(val_list, norm_val=norm_val, validation=True)
-        dataset_loader = PointVectorSummedDatasetLoader(val_list, validation=True)
+        dataset_loader = PointDatasetLoader(val_list, max_seq_length=16, norm_val=norm_val, validation=True)
+#        dataset_loader = PointVectorSummedDatasetLoader(val_list, validation=True)
         collate_fn = lstm_collate
         validate = validate_lstm
     model_ft = torch.nn.DataParallel(model_ft).cuda()
@@ -159,7 +126,7 @@ def main():
 
     checkpoint = torch.load(ckpt_path)
 
-    # below line is needed if network is trained with DataParallel
+    # below line is needed if network is trained with DataParallel and now the model is not initiated with dataparallel
 #    base_dict = {'.'.join(k.split('.')[1:]): v for k,v in list(checkpoint['state_dict'].items())}
 #    model_ft.load_state_dict(base_dict) 
     model_ft.load_state_dict(checkpoint['state_dict'])

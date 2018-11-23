@@ -21,7 +21,7 @@ from utils.dataset_loader import DatasetLoader
 from utils.dataset_loader_utils import WidthCrop, RandomHorizontalFlip, Resize, ResizePadFirst, To01Range
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
-from utils.file_utils import print_and_save, print_model_config
+from utils.file_utils import print_and_save
 from utils.train_utils import CyclicLR
 
 def train(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, lr_scheduler=None):
@@ -98,11 +98,11 @@ interpolation_methods = {'linear':cv2.INTER_LINEAR, 'cubic':cv2.INTER_CUBIC,
                          'lanc':cv2.INTER_LANCZOS4, 'linext':cv2.INTER_LINEAR_EXACT}
 
 def main():
-    args = parse_args()
-    verb_classes = 120
+    args, model_name = parse_args('resnet', val=False)
+    verb_classes = args.verb_classes
     
     base_output_dir = args.base_output_dir
-    model_name = args.model_name
+#    model_name = args.model_name
     train_list = args.train_list # r'splits\hand_track_train_1.txt'
     test_list = args.test_list # r'splits\hand_track_val_1.txt'
     
@@ -113,8 +113,9 @@ def main():
         log_file = os.path.join(base_output_dir, model_name, model_name+".txt")
     else:
         log_file = None
-        
-    print_model_config(args, log_file)
+    
+    print_and_save(args, log_file)
+    print_and_save("Model name: {}".format(model_name), log_file)
     
     mean = meanRGB if args.channels == 'RGB' else meanG
     std = stdRGB if args.channels == 'RGB' else stdG
@@ -165,7 +166,6 @@ def main():
     test_loader = DatasetLoader(test_list, test_transforms, args.channels)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
-#    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.lr_steps[0])
     if args.lr_type == 'step':
         lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
                                                        step_size=int(args.lr_steps[0]),
