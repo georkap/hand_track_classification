@@ -79,12 +79,15 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.validation = validation
         self.max_seq_length = max_seq_length
         self.clamp = clamp
+        
+        self.data_arr = [load_pickle(self.samples_list[index].image_path) for index in range(len(self.samples_list))]
     
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-        hand_tracks = load_pickle(self.samples_list[index].image_path)
+#        hand_tracks = load_pickle(self.samples_list[index].image_path)
+        hand_tracks = self.data_arr[index]
         
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
         left_track /= self.norm_val[:2]
