@@ -8,6 +8,7 @@ file_utils
 """
 import os
 import pandas as pd
+from matplotlib import pyplot as plt
 
 def print_and_save(text, path):
     print(text)
@@ -76,7 +77,8 @@ def get_train_results(lines):
 
 def make_plot_dataframe(np_columns, str_columns, title, file):
     df = pd.DataFrame(data=np_columns, columns=str_columns)
-    plot = df.plot(title=title).legend(loc='lower left')
+    plot = df.plot(title=title).legend(bbox_to_anchor=(0, -0.06), loc='upper left')
+    plt.tight_layout()
     fig=plot.get_figure()
     fig.savefig(file)
     
