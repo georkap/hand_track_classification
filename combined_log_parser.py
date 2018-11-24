@@ -52,7 +52,10 @@ for LOG_FILE in log_files:
     with open(LOG_FILE) as f:
         lines = f.readlines()
         
-    file_name = os.path.basename(LOG_FILE).split(".")[0]
+    name_parts = os.path.basename(LOG_FILE).split(".")
+    file_name = ""
+    for part in name_parts[:-1]:
+        file_name += part
     filenames.append(file_name)
     
     test_epochs, test_loss, test_top1, test_top5 = get_eval_results(lines, "Test")
