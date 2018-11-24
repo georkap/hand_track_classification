@@ -47,6 +47,7 @@ avg_train_losses = {}
 avg_train_top1s = {}
 avg_train_top5s = {}
 filenames = []
+max_epochs = 0
 for LOG_FILE in log_files:
     with open(LOG_FILE) as f:
         lines = f.readlines()
@@ -58,6 +59,8 @@ for LOG_FILE in log_files:
     train_epochs, train_loss, train_top1, train_top5 = get_eval_results(lines, "Train")
     epochs, avg_loss, avg_t1, avg_t5 = get_train_results(lines)
     
+    if len(epochs) > max_epochs:
+        max_epochs = len(epochs)
     assert test_epochs == epochs # should work
     
     test_losses[file_name] = test_loss
@@ -70,38 +73,39 @@ for LOG_FILE in log_files:
     avg_train_top1s[file_name] = avg_t1
     avg_train_top5s[file_name] = avg_t5
 
-np_columns = np.column_stack([test_top1s[fname] for fname in filenames])
+
+np_columns = np.column_stack([test_top1s[fname] + [0]*(max_epochs - len(test_top1s[fname])) for fname in filenames])
 df_test_top1 = make_plot_dataframe(np_columns, filenames, all_names[0],
                                    os.path.join(output_dir, "results_test_top1.png"))
 
-np_columns = np.column_stack([test_top5s[fname] for fname in filenames])
+np_columns = np.column_stack([test_top5s[fname] + [0]*(max_epochs - len(test_top5s[fname])) for fname in filenames])
 df_test_top5 = make_plot_dataframe(np_columns, filenames, all_names[1],
                                    os.path.join(output_dir, "results_test_top5.png"))
 
-np_columns = np.column_stack([test_losses[fname] for fname in filenames])
+np_columns = np.column_stack([test_losses[fname] + [0]*(max_epochs - len(test_losses[fname])) for fname in filenames])
 df_test_loss = make_plot_dataframe(np_columns, filenames, all_names[2], 
                                 os.path.join(output_dir, "results_test_loss.png"))
     
-np_columns = np.column_stack([train_top1s[fname] for fname in filenames])
+np_columns = np.column_stack([train_top1s[fname] + [0]*(max_epochs - len(train_top1s[fname])) for fname in filenames])
 df_train_top1 = make_plot_dataframe(np_columns, filenames, all_names[3], 
                                 os.path.join(output_dir, "results_train_top1.png"))
 
-np_columns = np.column_stack([train_top5s[fname] for fname in filenames])
+np_columns = np.column_stack([train_top5s[fname] + [0]*(max_epochs - len(train_top5s[fname])) for fname in filenames])
 df_train_top5 = make_plot_dataframe(np_columns, filenames, all_names[4], 
                                     os.path.join(output_dir, "results_train_top5.png"))
 
-np_columns = np.column_stack([train_losses[fname] for fname in filenames])
+np_columns = np.column_stack([train_losses[fname] + [0]*(max_epochs - len(train_losses[fname])) for fname in filenames])
 df_train_loss = make_plot_dataframe(np_columns, filenames, all_names[5], 
                                     os.path.join(output_dir, "results_train_loss.png"))
 
-np_columns = np.column_stack([avg_train_top1s[fname] for fname in filenames])
+np_columns = np.column_stack([avg_train_top1s[fname] + [0]*(max_epochs - len(avg_train_top1s[fname])) for fname in filenames])
 df_avg_train_top1 = make_plot_dataframe(np_columns, filenames, all_names[6], 
                                 os.path.join(output_dir, "results_avg_train_top1.png"))
 
-np_columns = np.column_stack([avg_train_top5s[fname] for fname in filenames])
+np_columns = np.column_stack([avg_train_top5s[fname] + [0]*(max_epochs - len(avg_train_top5s[fname])) for fname in filenames])
 df_avg_train_top5 = make_plot_dataframe(np_columns, filenames, all_names[7], 
                                         os.path.join(output_dir, "results_avg_train_top5.png"))
-np_columns = np.column_stack([avg_train_losses[fname] for fname in filenames])
+np_columns = np.column_stack([avg_train_losses[fname] + [0]*(max_epochs - len(avg_train_losses[fname])) for fname in filenames])
 df_avg_train_losses = make_plot_dataframe(np_columns, filenames, all_names[8], 
                                           os.path.join(output_dir, "results_avg_train_loss.png"))
 
