@@ -155,7 +155,9 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         else:
             seq_size = len(left_track)    
                 
-        class_id = 0 if self.samples_list[index].label_verb==5 else 1
+#        class_id = 0 if self.samples_list[index].label_verb==5 else 1
+        class_id = self.samples_list[index].label_verb
+
 
         if not self.validation:
             return vec, seq_size, class_id
