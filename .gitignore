@@ -108,3 +108,4 @@ venv.bak/
 hand_detection_track_images
 hand_detection_tracks
 batch_run*
+lstm_tests.py
