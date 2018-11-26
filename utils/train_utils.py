@@ -176,32 +176,22 @@ class CyclicLR(_LRScheduler):
         return lrs
 
 class LRRangeTest(_LRScheduler):
-    def __init__(self, optimizer):
+    def __init__(self, optimizer, lr_steps, step_size, last_epoch=-1):
         if not isinstance(optimizer, Optimizer):
             raise TypeError('{} is not an Optimizer'.format(
                 type(optimizer).__name__))
         self.optimizer = optimizer
+        self.lr_steps = lr_steps
+        self.step_size = step_size
+        super(LRRangeTest, self).__init__(optimizer, last_epoch)
         
     def get_lr(self):
-        """Calculates the learning rate at batch index. This function treats
-        `self.last_epoch` as the last batch index.
-        """
-        cycle = np.floor(1 + self.last_epoch / self.total_size)
-        x = 1 + self.last_epoch / self.total_size - cycle
-        if x <= self.step_ratio:
-            scale_factor = x / self.step_ratio
-        else:
-            scale_factor = (x - 1) / (self.step_ratio - 1)
-
         lrs = []
-        for base_lr, max_lr in zip(self.base_lrs, self.max_lrs):
-            base_height = (max_lr - base_lr) * scale_factor
-            if self.scale_mode == 'cycle':
-                lr = base_lr + base_height * self.scale_fn(cycle)
-            else:
-                lr = base_lr + base_height * self.scale_fn(self.last_epoch)
-            lrs.append(lr)
+        lr_ind = self.last_epoch//self.step_size
+        lr = self.lr_steps[lr_ind]
+        lrs.append(lr)
         return lrs
+        
 
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()

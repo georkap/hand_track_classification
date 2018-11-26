@@ -108,7 +108,8 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         points = np.concatenate((left_track, right_track), -1)
         seq_size = len(points)
         
-        class_id = 0 if self.samples_list[index].label_verb==5 else 1
+#        class_id = 0 if self.samples_list[index].label_verb==5 else 1
+        class_id = self.samples_list[index].label_verb
         
         if not self.validation:
             return points, seq_size, class_id
