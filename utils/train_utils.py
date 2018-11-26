@@ -10,10 +10,14 @@ Functions that are used in training the network.
 
 @author: Γιώργος
 """
-
+import time
+import torch
 import numpy as np
 from torch.optim.optimizer import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
+
+from utils.calc_utils import AverageMeter, accuracy
+from utils.file_utils import print_and_save
 
 class CyclicLR(_LRScheduler):
     """Sets the learning rate of each parameter group according to
@@ -170,3 +174,99 @@ class CyclicLR(_LRScheduler):
                 lr = base_lr + base_height * self.scale_fn(self.last_epoch)
             lrs.append(lr)
         return lrs
+
+class LRRangeTest(_LRScheduler):
+    def __init__(self, optimizer):
+        if not isinstance(optimizer, Optimizer):
+            raise TypeError('{} is not an Optimizer'.format(
+                type(optimizer).__name__))
+        self.optimizer = optimizer
+        
+    def get_lr(self):
+        """Calculates the learning rate at batch index. This function treats
+        `self.last_epoch` as the last batch index.
+        """
+        cycle = np.floor(1 + self.last_epoch / self.total_size)
+        x = 1 + self.last_epoch / self.total_size - cycle
+        if x <= self.step_ratio:
+            scale_factor = x / self.step_ratio
+        else:
+            scale_factor = (x - 1) / (self.step_ratio - 1)
+
+        lrs = []
+        for base_lr, max_lr in zip(self.base_lrs, self.max_lrs):
+            base_height = (max_lr - base_lr) * scale_factor
+            if self.scale_mode == 'cycle':
+                lr = base_lr + base_height * self.scale_fn(cycle)
+            else:
+                lr = base_lr + base_height * self.scale_fn(self.last_epoch)
+            lrs.append(lr)
+        return lrs
+
+def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
+    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
+    
+    print_and_save('*********', log_file)
+    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
+    t0 = time.time()
+    for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()    
+        
+        # for multilstm test
+#        inputs.squeeze_(0)
+#        inputs.transpose_(1,2)
+#        inputs.transpose_(0,1)
+        
+        inputs = torch.tensor(inputs, requires_grad=True).cuda()
+        targets = torch.tensor(targets).cuda()
+
+        inputs = inputs.transpose(1, 0)
+        output = model(inputs, seq_lengths)
+
+        loss = criterion(output, targets)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+#        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
+        top1.update(t1.item(), inputs.size(0))
+        top5.update(t5.item(), inputs.size(0))
+        losses.update(loss.item(), inputs.size(0))
+        batch_time.update(time.time() - t0)
+        t0 = time.time()
+        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                lr_scheduler.get_lr()[0]), log_file)
+
+def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+    with torch.no_grad():
+        model.eval()
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+        for batch_idx, (inputs, seq_lengths, targets) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            targets = torch.tensor(targets).cuda()
+
+            inputs = inputs.transpose(1, 0)
+            output = model(inputs, seq_lengths)
+            
+            loss = criterion(output, targets)
+
+            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+#            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
+            top1.update(t1.item(), inputs.size(0))
+            top5.update(t5.item(), inputs.size(0))
+            losses.update(loss.item(), inputs.size(0))
+
+            print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
+                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+    return top1.avg
