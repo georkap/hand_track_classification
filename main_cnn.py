@@ -158,12 +158,14 @@ def main():
     train_transforms = transforms.Compose([resize, 
                                            RandomHorizontalFlip(), To01Range(args.bin_img),
                                            transforms.ToTensor(), normalize])
-    train_loader = DatasetLoader(train_list, train_transforms, args.channels)
+    train_loader = DatasetLoader(train_list, num_classes=verb_classes, 
+                                 batch_transform=train_transforms, channels=args.channels)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)
 
     test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
                                           transforms.ToTensor(), normalize])
-    test_loader = DatasetLoader(test_list, test_transforms, args.channels)
+    test_loader = DatasetLoader(test_list, num_classes=verb_classes, 
+                                batch_transform=test_transforms, channels=args.channels)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
 
     if args.lr_type == 'step':

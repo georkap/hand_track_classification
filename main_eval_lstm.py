@@ -104,12 +104,15 @@ def main():
         if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
             sys.exit("Clamped tracks require dual lstms and a fixed lstm sequence size.")
         dataset_loader = PointDatasetLoader(val_list, max_seq_length=args.lstm_seq_size,
-                                            norm_val=norm_val, dual=args.lstm_dual,
-                                            clamp=args.lstm_clamped, validation=True)
+                                            num_classes=verb_classes, norm_val=norm_val,
+                                            dual=args.lstm_dual, clamp=args.lstm_clamped,
+                                            validation=True)
     elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
         dataset_loader = PointVectorSummedDatasetLoader(val_list,
                                                         max_seq_length=args.lstm_seq_size,
-                                                        dual=args.lstm_dual, validation=True)
+                                                        num_classes=verb_classes,
+                                                        dual=args.lstm_dual, 
+                                                        validation=True)
     else:
         sys.exit("Unsupported lstm feature")
 

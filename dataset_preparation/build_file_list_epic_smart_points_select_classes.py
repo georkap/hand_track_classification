@@ -13,7 +13,8 @@ import os
 
 get_track_class = lambda x: int(x.split('_')[1])
 
-selected_classes = [5,6]
+#selected_classes = [5,6]
+selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
 
 unavailable = [9, 11, 18]
 available_pids = ["P{:02d}".format(i) for i in range(1,32) if i not in unavailable]
@@ -27,7 +28,7 @@ for i in range(28):
 split_dicts = [split_1, split_2, split_3, split_4]
 
 BASE_DIR = r"..\hand_detection_tracks"
-SPLITS_DIR = r"..\splits\hand_tracks_select"
+SPLITS_DIR = r"..\splits\hand_tracks_select24"
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
 train_names = [os.path.join(SPLITS_DIR, "hand_locs_train_{}.txt".format(i)) for i in range(1,5)]

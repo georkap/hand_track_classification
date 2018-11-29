@@ -13,6 +13,16 @@ import cv2
 import numpy as np
 import torch.utils.data
 
+def make_class_mapping(samples_list):
+    classes = []
+    for sample in samples_list:
+        if sample.label_verb not in classes:
+            classes.append(sample.label_verb)
+    classes = np.sort(classes)
+    mapping_dict = {}
+    for i, c in enumerate(classes):
+        mapping_dict[c] = i
+    return mapping_dict
 
 def parse_samples_list(list_file):
     return [ImageData(x.strip().split(' ')) for x in open(list_file)]
@@ -23,7 +33,6 @@ def load_pickle(tracks_path):
     return tracks
 
 class ImageData(object):
-
     def __init__(self, row):
         self.data = row
 
@@ -45,9 +54,13 @@ class ImageData(object):
 
 class DatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, list_file,
+    def __init__(self, list_file, num_classes=120,
                  batch_transform=None, channels='RGB', validation=False ):
         self.samples_list = parse_samples_list(list_file)
+        if num_classes != 120:
+            self.mapping = make_class_mapping(self.samples_list)
+        else:
+            self.mapping = None
         self.transform = batch_transform
         self.channels = channels
         self.validation = validation
@@ -64,16 +77,25 @@ class DatasetLoader(torch.utils.data.Dataset):
         if self.transform is not None:
             img = self.transform(img)
 
+        if self.mapping:
+            class_id = self.mapping[self.samples_list[index].label_verb]
+        else:
+            class_id = self.samples_list[index].label_verb
+
         if not self.validation:
-            return img, self.samples_list[index].label_verb
+            return img, class_id
         else:
             name_parts = self.samples_list[index].image_path.split("\\")
-            return img, self.samples_list[index].label_verb, name_parts[-2] + "\\" + name_parts[-1]
+            return img, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, batch_transform=None, norm_val=[1.,1.,1.,1.], 
-                 dual=False, clamp=False, validation=False):
+    def __init__(self, list_file, max_seq_length=None, num_classes=120, batch_transform=None, 
+                 norm_val=[1.,1.,1.,1.], dual=False, clamp=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
+        if num_classes != 120:
+            self.mapping = make_class_mapping(self.samples_list)
+        else:
+            self.mapping = None
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
         self.validation = validation
@@ -81,7 +103,7 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.clamp = clamp
         
         self.data_arr = [load_pickle(self.samples_list[index].image_path) for index in range(len(self.samples_list))]
-    
+          
     def __len__(self):
         return len(self.samples_list)
     
@@ -108,8 +130,10 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         points = np.concatenate((left_track, right_track), -1)
         seq_size = len(points)
         
-#        class_id = 0 if self.samples_list[index].label_verb==5 else 1
-        class_id = self.samples_list[index].label_verb
+        if self.mapping:
+            class_id = self.mapping[self.samples_list[index].label_verb]
+        else:
+            class_id = self.samples_list[index].label_verb
         
         if not self.validation:
             return points, seq_size, class_id
@@ -118,8 +142,13 @@ class PointDatasetLoader(torch.utils.data.Dataset):
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, dual=False, validation=False):
+    def __init__(self, list_file, max_seq_length=None, num_classes=120, 
+                 dual=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
+        if num_classes != 120:
+            self.mapping = make_class_mapping(self.samples_list)
+        else:
+            self.mapping = None
         self.validation = validation
         self.max_seq_length = max_seq_length
         self.dual = dual
@@ -155,9 +184,10 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         else:
             seq_size = len(left_track)    
                 
-#        class_id = 0 if self.samples_list[index].label_verb==5 else 1
-        class_id = self.samples_list[index].label_verb
-
+        if self.mapping:
+            class_id = self.mapping[self.samples_list[index].label_verb]
+        else:
+            class_id = self.samples_list[index].label_verb
 
         if not self.validation:
             return vec, seq_size, class_id

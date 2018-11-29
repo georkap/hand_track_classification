@@ -22,12 +22,10 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
 from models.resnet_zoo import resnet_loader
-from models.lstm_hands import LSTM_Hands
-from utils.dataset_loader import DatasetLoader, PointDatasetLoader, PointVectorSummedDatasetLoader
+from utils.dataset_loader import DatasetLoader
 from utils.dataset_loader_utils import WidthCrop, Resize, ResizePadFirst, To01Range
-from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
-from utils.argparse_utils import parse_args_val
+from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
@@ -77,7 +75,8 @@ def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_fil
 
 
 def main():
-    args = parse_args_val()
+    args = parse_args('resnet', val=True)
+    
     verb_classes = args.verb_classes
     
     ckpt_path = args.ckpt_path
@@ -92,34 +91,28 @@ def main():
     
     print_and_save(args, log_file)
 
-    if args.resnet_version is not None:
-        model_ft = resnet_loader(verb_classes, 0, False, 
-                             False, args.resnet_version, 
-                             1 if args.channels == 'G' else 3,
-                             args.no_resize)
-        
-        mean = meanRGB if args.channels == 'RGB' else meanG
-        std = stdRGB if args.channels == 'RGB' else stdG
-        normalize = transforms.Normalize(mean=mean, std=std)
+    model_ft = resnet_loader(verb_classes, 0, False, False, args.resnet_version, 
+                         1 if args.channels == 'G' else 3, args.no_resize)
+    
+    mean = meanRGB if args.channels == 'RGB' else meanG
+    std = stdRGB if args.channels == 'RGB' else stdG
+    normalize = transforms.Normalize(mean=mean, std=std)
 
-        if args.no_resize:
-            resize = WidthCrop()
+    if args.no_resize:
+        resize = WidthCrop()
+    else:
+        if args.pad:
+            resize = ResizePadFirst(224, False, interpolation_methods[args.inter]) # currently set this binarize to False, because it is false duh
         else:
-            if args.pad:
-                resize = ResizePadFirst(224, False, interpolation_methods[args.inter]) # currently set this binarize to False, because it is false duh
-            else:
-                resize = Resize((224,224), False, interpolation_methods[args.inter])
-        test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
-                                          transforms.ToTensor(), normalize])
-        dataset_loader = DatasetLoader(val_list, test_transforms, args.channels, validation=True)
-        collate_fn = torch.utils.data.dataloader.default_collate
-        validate = validate_resnet
-    else:        
-        model_ft = LSTM_Hands(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, 0)
-        dataset_loader = PointDatasetLoader(val_list, max_seq_length=16, norm_val=norm_val, validation=True)
-#        dataset_loader = PointVectorSummedDatasetLoader(val_list, validation=True)
-        collate_fn = lstm_collate
-        validate = validate_lstm
+            resize = Resize((224,224), False, interpolation_methods[args.inter])
+    test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
+                                      transforms.ToTensor(), normalize])
+    dataset_loader = DatasetLoader(val_list, num_classes=verb_classes, 
+                                   batch_transform=test_transforms, channels=args.channels,
+                                   validation=True)
+    collate_fn = torch.utils.data.dataloader.default_collate
+    validate = validate_resnet
+
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
