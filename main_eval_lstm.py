@@ -133,8 +133,8 @@ def main():
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
 
     print_and_save(cf, log_file)
-    print_and_save("Cls Recall {}".format(recall), log_file)
-    print_and_save("Cls Precision {}".format(precision), log_file)
+    print_and_save("Cls Rec {}".format(recall), log_file)
+    print_and_save("Cls Pre {}".format(precision), log_file)
     print_and_save("Cls Acc {}".format(cls_acc), log_file)
     print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
     print_and_save("Dataset Acc {}".format(top1_acc), log_file)
