@@ -12,7 +12,6 @@ for lstm models
 import os
 import sys
 import numpy as np
-from sklearn.metrics import confusion_matrix
 
 import torch
 import torch.utils.data
@@ -21,7 +20,7 @@ import torch.backends.cudnn as cudnn
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand
 from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
-from utils.calc_utils import AverageMeter, accuracy
+from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 
@@ -128,20 +127,17 @@ def main():
 
     #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
     #video_labels = [x[1].cpu().numpy() for x in outputs]
-    video_pred = [x[0] for x in outputs]
+    video_preds = [x[0] for x in outputs]
     video_labels = [x[1] for x in outputs]
 
-    cf = confusion_matrix(video_labels, video_pred).astype(int)
-
-    cls_cnt = cf.sum(axis=1)
-    cls_hit = np.diag(cf)
-
-    with np.errstate(divide='warn'):
-        cls_acc = np.nan_to_num(cls_hit / cls_cnt)
+    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
 
     print_and_save(cf, log_file)
-    print_and_save(cls_acc, log_file)
-    print_and_save('Accuracy {:.02f}%'.format(np.mean(cls_acc) * 100), log_file)
+    print_and_save("Cls Recall {}".format(recall), log_file)
+    print_and_save("Cls Precision {}".format(precision), log_file)
+    print_and_save("Cls Acc {}".format(cls_acc), log_file)
+    print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
+    print_and_save("Dataset Acc {}".format(top1_acc), log_file)
 
 if __name__ == '__main__':
     main()

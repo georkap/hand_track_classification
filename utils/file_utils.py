@@ -75,6 +75,29 @@ def get_train_results(lines):
     
     return epochs, avg_loss, avg_t1, avg_t5
 
+def parse_train_line_lr(line):
+    loss_avg = float(line.split("avg:")[1].split("]")[0])
+    lr = float(line.split()[-1])
+
+    return loss_avg, lr
+
+def get_loss_over_lr(lines):
+    avg_loss, lrs = [], []
+    train_start = False
+    for i, line in enumerate(lines):
+        if line.startswith("Beginning"):
+            train_start=True
+            continue
+        if train_start and line.startswith("Evaluating"):
+            train_start=False
+            continue
+        if train_start:
+            loss_avg, lr = parse_train_line_lr(line)
+            avg_loss.append(loss_avg)
+            lrs.append(lr)
+    
+    return avg_loss, lrs
+
 def make_plot_dataframe(np_columns, str_columns, title, file):
     df = pd.DataFrame(data=np_columns, columns=str_columns)
     plot = df.plot(title=title).legend(bbox_to_anchor=(0, -0.06), loc='upper left')

@@ -11,7 +11,7 @@ import os
 import numpy as np
 
 from utils.argparse_utils import parse_args_train_log_file
-from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe
+from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe, get_loss_over_lr
 
 args = parse_args_train_log_file() #--train_log_path
 LOG_FILE = args.train_log_path
@@ -40,6 +40,24 @@ avg_train_columns = np.column_stack([avg_t1, avg_t5, avg_loss])
 test_names = all_names[:3]
 train_names = all_names[3:6]
 avg_train_names = all_names[6:]
+
+if not args.no_lr_graph:
+    avg_train_loss, lrs = get_loss_over_lr(lines)
+#    from matplotlib import pyplot as plt
+#    title="{}\n Avg Train loss versus learning rate per batch".format(file_name)
+#    file = os.path.join(output_dir, "results_lr.png")
+#    plot = plt.plot(avg_train_loss, lrs)
+#    plt.title(title)
+#    plt.xlabel("learning rate")
+#    plt.ylabel("loss")
+#    plt.legend(bbox_to_anchor=(0, -0.06), loc="upper left")
+#    plt.tight_layout()
+#    plt.savefig(file)
+    
+    df_lr = make_plot_dataframe(np.column_stack([avg_train_loss, lrs]), 
+                                ["avg train loss", "learning_rate"],
+                                "{}\n Avg Train loss versus learning rate per batch".format(file_name),
+                                os.path.join(output_dir, "results_lr.png"))
 
 # all results
 df_all = make_plot_dataframe(np.column_stack([test_columns, avg_train_columns]), 

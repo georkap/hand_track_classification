@@ -252,6 +252,7 @@ def make_model_name(args, net_type):
 def parse_args_train_log_file():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_log_path", type=str, help="The file to be analyzed", required=True)
+    parser.add_argument("--no_lr_graph", default=False, action='store_true')
     return parser.parse_args()
 
 def parse_args_train_log_dir():
