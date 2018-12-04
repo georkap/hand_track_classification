@@ -62,8 +62,8 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         for j in range(output.size(0)):
             t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
                               targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-            top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
+            top1.update(t1.item(), 1)
+            top5.update(t5.item(), 1)
         
         losses.update(loss.item(), inputs.size(0))
         batch_time.update(time.time() - t0)
@@ -93,8 +93,8 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             for j in range(output.size(0)):
                 t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
                                   targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-                top1.update(t1.item(), inputs.size(0))
-                top5.update(t5.item(), inputs.size(0))
+                top1.update(t1.item(), 1)
+                top5.update(t5.item(), 1)
                 
             losses.update(loss.item(), inputs.size(0))
 
