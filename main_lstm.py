@@ -9,6 +9,7 @@ Training on the hand locations using resnet
 
 import os
 import sys
+import numpy as np
 import time
 from datetime import datetime
 import shutil
@@ -54,10 +55,16 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         loss.backward()
         optimizer.step()
 
-        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-#        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
-        top1.update(t1.item(), inputs.size(0))
-        top5.update(t5.item(), inputs.size(0))
+#        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+#        top1.update(t1.item(), inputs.size(0))
+#        top5.update(t5.item(), inputs.size(0))
+        
+        for j in range(output.size(0)):
+            t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
+                              targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
+            top1.update(t1.item(), inputs.size(0))
+            top5.update(t5.item(), inputs.size(0))
+        
         losses.update(loss.item(), inputs.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
@@ -79,10 +86,16 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             
             loss = criterion(output, targets)
 
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-#            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
-            top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
+#            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+#            top1.update(t1.item(), inputs.size(0))
+#            top5.update(t5.item(), inputs.size(0))
+            
+            for j in range(output.size(0)):
+                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
+                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
+                top1.update(t1.item(), inputs.size(0))
+                top5.update(t5.item(), inputs.size(0))
+                
             losses.update(loss.item(), inputs.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
