@@ -65,7 +65,7 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
             top1.update(t1.item(), 1)
             top5.update(t5.item(), 1)
         
-        losses.update(loss.item(), inputs.size(0))
+        losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
@@ -96,7 +96,7 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
                 top1.update(t1.item(), 1)
                 top5.update(t5.item(), 1)
                 
-            losses.update(loss.item(), inputs.size(0))
+            losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                     cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
@@ -223,7 +223,7 @@ def main():
             else:
                 weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
             print_and_save('Saving weights to {}'.format(weight_file), log_file)
-            torch.save({'epoch': epoch + 1,
+            torch.save({'epoch': epoch,
                         'state_dict': model_ft.state_dict(),
                         'optimizer': optimizer.state_dict(),
                         'top1': new_top1}, weight_file)
