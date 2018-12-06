@@ -71,23 +71,14 @@ def main():
     val_list = args.val_list
     
     output_dir = os.path.dirname(ckpt_path)
-
-    if args.logging:
-        log_file = os.path.join(output_dir, "results-accuracy-validation.txt")
-    else:
-        log_file = None
+    
+    log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
     
     print_and_save(args, log_file)
     
-    if args.no_norm_input:
-        norm_val = [1., 1., 1., 1.]
-    else:
-        norm_val = [456., 256., 456., 256.]
+    norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
         
-    if args.lstm_dual:
-        lstm_model = LSTM_per_hand
-    else:
-        lstm_model = LSTM_Hands    
+    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands
     
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
     collate_fn = lstm_collate
