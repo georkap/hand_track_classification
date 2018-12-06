@@ -48,11 +48,11 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
                 label = targets[j].cpu().numpy()
                 outputs.append([res, label])
                 batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
-                
-                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
-                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-                top1.update(t1.item(), 1)
-                top5.update(t5.item(), 1)
+
+            t1, t5 = accuracy(output.detach().cpu(), 
+                              targets.detach().cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
             losses.update(loss.item(), output.size(0))
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(

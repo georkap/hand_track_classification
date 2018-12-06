@@ -2,17 +2,14 @@
 """
 Created on Tue Nov  6 16:19:35 2018
 
-Training on the hand locations using resnet
+Training on the hand locations using lstm
 
 @author: Γιώργος
 """
 
 import os
 import sys
-import numpy as np
 import time
-from datetime import datetime
-import shutil
 import torch
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand
 #from models.lstm_hands_enc_dec import LSTM_Hands_encdec
@@ -21,8 +18,8 @@ from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoa
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
-from utils.file_utils import print_and_save
-from utils.train_utils import CyclicLR
+from utils.file_utils import print_and_save, save_checkpoints, resume_checkpoint
+from utils.train_utils import CyclicLR, load_lr_scheduler
 
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -36,12 +33,7 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
     t0 = time.time()
     for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
         if isinstance(lr_scheduler, CyclicLR):
-            lr_scheduler.step()    
-        
-        # for multilstm test
-#        inputs.squeeze_(0)
-#        inputs.transpose_(1,2)
-#        inputs.transpose_(0,1)
+            lr_scheduler.step()
         
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         targets = torch.tensor(targets).cuda()
@@ -55,16 +47,9 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         loss.backward()
         optimizer.step()
 
-#        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-#        top1.update(t1.item(), inputs.size(0))
-#        top5.update(t5.item(), inputs.size(0))
-        
-        for j in range(output.size(0)):
-            t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
-                              targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-            top1.update(t1.item(), 1)
-            top5.update(t5.item(), 1)
-        
+        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        top1.update(t1.item(), output.size(0))
+        top5.update(t5.item(), output.size(0))
         losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
@@ -86,16 +71,9 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             
             loss = criterion(output, targets)
 
-#            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-#            top1.update(t1.item(), inputs.size(0))
-#            top5.update(t5.item(), inputs.size(0))
-            
-            for j in range(output.size(0)):
-                t1, t5 = accuracy(output[j].unsqueeze_(0).detach().cpu(), 
-                                  targets[j].unsqueeze_(0).detach().cpu(), topk=(1,5))
-                top1.update(t1.item(), 1)
-                top5.update(t5.item(), 1)
-                
+            t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))                
             losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
@@ -106,54 +84,31 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
 
 def main():
     args, model_name = parse_args('lstm', val=False)
-    verb_classes = args.verb_classes
     
-    base_output_dir = args.base_output_dir
-#    model_name = args.model_name
-    train_list = args.train_list # r'splits\hand_tracks\hand_locs_train_1.txt'
-    test_list = args.test_list # r'splits\hand_tracks\hand_locs_val_1.txt'
-    
-    output_dir = os.path.join(base_output_dir, model_name)
+    output_dir = os.path.join(args.base_output_dir, model_name)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     else:
         if not args.resume:
             sys.exit("Attempted to overwrite previous folder, exiting..")
-    if args.logging:
-        log_file = os.path.join(base_output_dir, model_name, model_name+".txt")
-    else:
-        log_file = None
+    
+    log_file = os.path.join(args.base_output_dir, model_name, model_name+".txt") if args.logging else None
         
-    if args.no_norm_input:
-        norm_val = [1., 1., 1., 1.]
-    else:
-        norm_val = [456., 256., 456., 256.]
+    norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
         
     print_and_save(args, log_file)
     print_and_save("Model name: {}".format(model_name), log_file)
 
-    if args.lstm_dual:
-        lstm_model = LSTM_per_hand
-    else:
-        lstm_model = LSTM_Hands
+    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands
 
-    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
+    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, args.dropout)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
     
     if args.resume:
-        ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
-        ckpt_name_parts = os.path.basename(ckpt_path).split(".")
-        old_ckpt_name = ""
-        for part in ckpt_name_parts[:-1]:
-            old_ckpt_name += part
-        dtm = datetime.fromtimestamp(os.path.getmtime(ckpt_path))
-        old_ckpt = os.path.join(os.path.dirname(ckpt_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
-        shutil.copyfile(ckpt_path, old_ckpt)
-        checkpoint = torch.load(ckpt_path)    
-        model_ft.load_state_dict(checkpoint['state_dict'])
+        model_ft = resume_checkpoint(model_ft, output_dir, model_name)
     
     params_to_update = model_ft.parameters()
     print_and_save("Params to learn:", log_file)
@@ -168,69 +123,41 @@ def main():
     if args.lstm_feature == "coords" or args.lstm_feature == "coords_dual":
         if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
             sys.exit("Clamped tracks require dual lstms and a fixed lstm sequence size.")
-        train_loader = PointDatasetLoader(train_list, max_seq_length=args.lstm_seq_size,
-                                          num_classes=verb_classes, norm_val=norm_val,
+        train_loader = PointDatasetLoader(args.train_list, max_seq_length=args.lstm_seq_size,
+                                          num_classes=args.verb_classes, norm_val=norm_val,
                                           dual=args.lstm_dual, clamp=args.lstm_clamped)
-        test_loader = PointDatasetLoader(test_list, max_seq_length=args.lstm_seq_size,
-                                         num_classes=verb_classes, norm_val=norm_val, 
+        test_loader = PointDatasetLoader(args.test_list, max_seq_length=args.lstm_seq_size,
+                                         num_classes=args.verb_classes, norm_val=norm_val, 
                                          dual=args.lstm_dual, clamp=args.lstm_clamped)
     elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
-        train_loader = PointVectorSummedDatasetLoader(train_list, 
+        train_loader = PointVectorSummedDatasetLoader(args.train_list, 
                                                       max_seq_length=args.lstm_seq_size,
-                                                      num_classes=verb_classes, 
+                                                      num_classes=args.verb_classes, 
                                                       dual=args.lstm_dual)
-        test_loader = PointVectorSummedDatasetLoader(test_list,
+        test_loader = PointVectorSummedDatasetLoader(args.test_list,
                                                      max_seq_length=args.lstm_seq_size,
-                                                     num_classes=verb_classes,
+                                                     num_classes=args.verb_classes,
                                                      dual=args.lstm_dual)
     else:
         sys.exit("Unsupported lstm feature")
+#    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)  
+#    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
 
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=lstm_collate, pin_memory=True)
 
-#    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)
-#    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)    
-#    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
-#    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True)
-
-    if args.lr_type == 'step':
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
-                                                       step_size=int(args.lr_steps[0]),
-                                                       gamma=float(args.lr_steps[1]))
-    elif args.lr_type == 'multistep':
-        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
-                                                            milestones=[int(x) for x in args.lr_steps[:-1]],
-                                                            gamma=float(args.lr_steps[-1]))
-    elif args.lr_type == 'clr':
-        lr_scheduler = CyclicLR(optimizer, base_lr=float(args.lr_steps[0]), 
-                                max_lr=float(args.lr_steps[1]), step_size_up=int(args.lr_steps[2])*len(train_iterator),
-                                step_size_down=int(args.lr_steps[3])*len(train_iterator), mode=str(args.lr_steps[4]),
-                                gamma=float(args.lr_steps[5]))
+    lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
     new_top1, top1 = 0.0, 0.0
-    isbest = False
     for epoch in range(args.max_epochs):
         train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
                 test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
             new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
-            isbest = True if new_top1 >= top1 else False
-            
-            if args.save_all_weights:
-                weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
-            else:
-                weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
-            print_and_save('Saving weights to {}'.format(weight_file), log_file)
-            torch.save({'epoch': epoch,
-                        'state_dict': model_ft.state_dict(),
-                        'optimizer': optimizer.state_dict(),
-                        'top1': new_top1}, weight_file)
-            if isbest:
-                best = os.path.join(output_dir, model_name+'_best.pth')
-                shutil.copyfile(weight_file, best)
-                top1 = new_top1
+            top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
+                                    args.save_all_weights, output_dir, model_name, epoch,
+                                    log_file)
                 
 
 if __name__=='__main__':

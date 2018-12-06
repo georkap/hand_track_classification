@@ -7,6 +7,9 @@ file_utils
 @author: GEO
 """
 import os
+import torch
+import shutil
+import datetime
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -106,3 +109,34 @@ def make_plot_dataframe(np_columns, str_columns, title, file):
     fig.savefig(file)
     
     return df
+
+def save_checkpoints(model_ft, optimizer, top1, new_top1,
+                     save_all_weights, output_dir, model_name, epoch, log_file):
+    if save_all_weights:
+        weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
+    else:
+        weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
+    print_and_save('Saving weights to {}'.format(weight_file), log_file)
+    torch.save({'epoch': epoch,
+                'state_dict': model_ft.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'top1': new_top1}, weight_file)
+    isbest = True if new_top1 >= top1 else False
+    if isbest:
+        best = os.path.join(output_dir, model_name+'_best.pth')
+        shutil.copyfile(weight_file, best)
+        top1 = new_top1
+    return top1
+
+def resume_checkpoint(model_ft, output_dir, model_name):
+    ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
+    ckpt_name_parts = os.path.basename(ckpt_path).split(".")
+    old_ckpt_name = ""
+    for part in ckpt_name_parts[:-1]:
+        old_ckpt_name += part
+    dtm = datetime.fromtimestamp(os.path.getmtime(ckpt_path))
+    old_ckpt = os.path.join(os.path.dirname(ckpt_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
+    shutil.copyfile(ckpt_path, old_ckpt)
+    checkpoint = torch.load(ckpt_path)    
+    model_ft.load_state_dict(checkpoint['state_dict'])
+    return model_ft

@@ -13,6 +13,22 @@ import cv2
 import numpy as np
 import torch.utils.data
 
+def get_class_weights(list_file, num_classes, use_mapping):
+    samples_list = parse_samples_list(list_file)
+    counts = np.zeros(num_classes)
+    mapping = None
+    if use_mapping:
+        mapping = make_class_mapping(samples_list)
+        for s in samples_list:
+            counts[mapping[s.label_verb]] += 1
+    else:
+        for s in samples_list:
+            counts[s.label_verb] += 1
+    
+    weights = 1/counts
+    weights = weights/np.sum(weights)
+    return weights.astype(np.float32)
+
 def make_class_mapping(samples_list):
     classes = []
     for sample in samples_list:

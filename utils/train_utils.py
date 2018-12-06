@@ -10,6 +10,7 @@ Functions that are used in training the network.
 
 @author: Γιώργος
 """
+import sys
 import time
 import torch
 import numpy as np
@@ -192,6 +193,24 @@ class LRRangeTest(_LRScheduler):
         lrs.append(lr)
         return lrs
         
+def load_lr_scheduler(lr_type, lr_steps, optimizer, train_iterator_length):
+    lr_scheduler = None
+    if lr_type == 'step':
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer,
+                                                       step_size=int(lr_steps[0]),
+                                                       gamma=float(lr_steps[1]))
+    elif lr_type == 'multistep':
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,
+                                                            milestones=[int(x) for x in lr_steps[:-1]],
+                                                            gamma=float(lr_steps[-1]))
+    elif lr_type == 'clr':
+        lr_scheduler = CyclicLR(optimizer, base_lr=float(lr_steps[0]), 
+                                max_lr=float(lr_steps[1]), step_size_up=int(lr_steps[2])*train_iterator_length,
+                                step_size_down=int(lr_steps[3])*train_iterator_length, mode=str(lr_steps[4]),
+                                gamma=float(lr_steps[5]))
+    else:
+        sys.exit("Unsupported lr type")
+    return lr_scheduler
 
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
@@ -225,10 +244,9 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
         optimizer.step()
 
         t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-#        t1, t2 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,2))
-        top1.update(t1.item(), inputs.size(0))
-        top5.update(t5.item(), inputs.size(0))
-        losses.update(loss.item(), inputs.size(0))
+        top1.update(t1.item(), output.size(0))
+        top5.update(t5.item(), output.size(0))
+        losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
@@ -249,11 +267,10 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             
             loss = criterion(output, targets)
 
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-#            t1, t2 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,2))
-            top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
-            losses.update(loss.item(), inputs.size(0))
+            t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))                
+            losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                     cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)

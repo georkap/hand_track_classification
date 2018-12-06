@@ -56,9 +56,9 @@ def train(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, l
         optimizer.step()
 
         t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-        top1.update(t1.item(), inputs.size(0))
-        top5.update(t5.item(), inputs.size(0))
-        losses.update(loss.item(), inputs.size(0))
+        top1.update(t1.item(), output.size(0))
+        top5.update(t5.item(), output.size(0))
+        losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
@@ -78,9 +78,9 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             loss = criterion(output, targets)
 
             t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
-            top1.update(t1.item(), inputs.size(0))
-            top5.update(t5.item(), inputs.size(0))
-            losses.update(loss.item(), inputs.size(0))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
+            losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
                     cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
