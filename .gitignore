@@ -107,6 +107,6 @@ venv.bak/
 # Project specific symlinks
 hand_detection_track_images
 hand_detection_tracks
-batch_run*
+batch_*
 lstm_tests.py
 main_lstm_weighted.py
