@@ -9,7 +9,7 @@ file_utils
 import os
 import torch
 import shutil
-import datetime
+from datetime import datetime
 import pandas as pd
 from matplotlib import pyplot as plt
 
@@ -128,15 +128,21 @@ def save_checkpoints(model_ft, optimizer, top1, new_top1,
         top1 = new_top1
     return top1
 
-def resume_checkpoint(model_ft, output_dir, model_name):
-    ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
-    ckpt_name_parts = os.path.basename(ckpt_path).split(".")
+def save_prev_checkpoint(pth_path):
+    ckpt_name_parts = os.path.basename(pth_path).split(".")
     old_ckpt_name = ""
     for part in ckpt_name_parts[:-1]:
         old_ckpt_name += part
-    dtm = datetime.fromtimestamp(os.path.getmtime(ckpt_path))
-    old_ckpt = os.path.join(os.path.dirname(ckpt_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
-    shutil.copyfile(ckpt_path, old_ckpt)
+    dtm = datetime.fromtimestamp(os.path.getmtime(pth_path))
+    old_ckpt = os.path.join(os.path.dirname(pth_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
+    shutil.copyfile(pth_path, old_ckpt)
+
+def resume_checkpoint(model_ft, output_dir, model_name):
+    ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
+    save_prev_checkpoint(ckpt_path)
+    old_best_ckpt_path = os.path.join(output_dir, model_name + '_best.pth')
+    save_prev_checkpoint(old_best_ckpt_path)
+    
     checkpoint = torch.load(ckpt_path)    
     model_ft.load_state_dict(checkpoint['state_dict'])
     return model_ft
