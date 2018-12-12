@@ -258,4 +258,5 @@ def parse_args_train_log_file():
 def parse_args_train_log_dir():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_log_dir", type=str, help="Dir containing the logs to be analyzed", required=True)
+    parser.add_argument("--walk", default=False, action='store_true')
     return parser.parse_args()

@@ -146,3 +146,16 @@ def resume_checkpoint(model_ft, output_dir, model_name):
     checkpoint = torch.load(ckpt_path)    
     model_ft.load_state_dict(checkpoint['state_dict'])
     return model_ft
+
+def get_log_files(LOG_DIR, pattern, walk):
+    log_files = []
+    if walk:
+        for root, dirs, files in os.walk(LOG_DIR):
+            for file in files:
+                if file.startswith(pattern) and file.endswith('.txt'):
+                    log_files.append(os.path.join(root, file))
+    else:
+        log_file_names = [x for x in os.listdir(LOG_DIR) if x.endswith('.txt')]
+        log_files = [os.path.join(LOG_DIR, x) for x in log_file_names]
+    
+    return log_files

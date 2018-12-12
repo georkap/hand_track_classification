@@ -11,18 +11,18 @@ import os
 import pandas
 import numpy as np
 from utils.argparse_utils import parse_args_train_log_dir
-from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe
+from utils.file_utils import get_eval_results, get_log_files
 
 args = parse_args_train_log_dir() #--train_log_dir
 LOG_DIR = args.train_log_dir
-output_dir = os.path.join(LOG_DIR, "parsed_logs")
+output_dir = os.path.join(LOG_DIR, "_excel")
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
 excel_writer = pandas.ExcelWriter(os.path.join(output_dir, "best_test_results.xlsx"))
 
-log_file_names = [x for x in os.listdir(LOG_DIR) if x.endswith('.txt')]
-log_files = [os.path.join(LOG_DIR, x) for x in log_file_names]
+log_files = get_log_files(LOG_DIR, "lstm_", args.walk)
+    
 columns=["file","top1-1","top1-2","top1-3","top1-4","top1-5","epoch","loss","top5"]
 df_all = pandas.DataFrame(columns=columns)
 for LOG_FILE in log_files:
