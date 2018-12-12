@@ -159,3 +159,16 @@ def get_log_files(LOG_DIR, pattern, walk):
         log_files = [os.path.join(LOG_DIR, x) for x in log_file_names]
     
     return log_files
+
+def parse_log_file_name(name_parts):
+    batch_size = int(name_parts[0].split('_')[1])
+    dropout = float(name_parts[1].split('_')[0])/10
+    epochs = int(name_parts[1].split('_')[1])
+    input_size = int(name_parts[1].split('_')[2])
+    hidden_size = int(name_parts[1].split('_')[3])
+    num_layers = int(name_parts[1].split('_')[4])
+    seq_size = int(name_parts[1].split('_')[5][-2:])
+    feature = name_parts[1].split('_')[6]
+    lr_type = name_parts[1].split('_')[7]
+    dataset = name_parts[1].split('_')[-1]
+    return batch_size, dropout, epochs, input_size, hidden_size, num_layers, seq_size, feature, lr_type, dataset
