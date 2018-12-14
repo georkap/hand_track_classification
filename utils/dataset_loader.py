@@ -169,11 +169,14 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         self.max_seq_length = max_seq_length
         self.dual = dual
         
+        self.data_arr = [load_pickle(self.samples_list[index].image_path) for index in range(len(self.samples_list))]
+        
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-        hand_tracks = load_pickle(self.samples_list[index].image_path)
+#        hand_tracks = load_pickle(self.samples_list[index].image_path)
+        hand_tracks = self.data_arr[index]
         left_track = np.array(hand_tracks['left'], dtype=np.int)
         right_track = np.array(hand_tracks['right'], dtype=np.int)   
         
