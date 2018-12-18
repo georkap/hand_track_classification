@@ -96,6 +96,7 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--lstm_layers', type=int, default=2)
         parser.add_argument('--lstm_dual', default=False, action='store_true')
         parser.add_argument('--lstm_seq_size', type=int, default=0, help="If not 0, it will perform a uniform sampling over the sequence to get to the desired number.")
+        parser.add_argument('--lstm_attn', default=False, action='store_true')
         
     return parser
     
@@ -169,6 +170,8 @@ def make_model_name(args, net_type):
                                     args.dropout, args.max_epochs)
         if args.lstm_dual:
             model_name = model_name + "_dual"
+        if args.lstm_attn:
+            model_name = model_name + "_attn"
         model_name = model_name + "_{}_{}_{}".format(args.lstm_input,
                                     args.lstm_hidden, args.lstm_layers)
         model_name = model_name + "_seq{}".format(args.lstm_seq_size if args.lstm_seq_size != 0 else "full")

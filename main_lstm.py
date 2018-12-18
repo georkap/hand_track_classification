@@ -9,78 +9,15 @@ Training on the hand locations using lstm
 
 import os
 import sys
-import time
 import torch
-from models.lstm_hands import LSTM_Hands, LSTM_per_hand
+from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 #from models.lstm_hands_enc_dec import LSTM_Hands_encdec
 import torch.backends.cudnn as cudnn
 from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
-from utils.calc_utils import AverageMeter, accuracy
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, resume_checkpoint
-from utils.train_utils import CyclicLR, load_lr_scheduler
-
-def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
-    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
-    model.train()
-    
-    if not isinstance(lr_scheduler, CyclicLR):
-        lr_scheduler.step()
-    
-    print_and_save('*********', log_file)
-    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
-    t0 = time.time()
-    for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
-        if isinstance(lr_scheduler, CyclicLR):
-            lr_scheduler.step()
-        
-        inputs = torch.tensor(inputs, requires_grad=True).cuda()
-        targets = torch.tensor(targets).cuda()
-
-        inputs = inputs.transpose(1, 0)
-        output = model(inputs, seq_lengths)
-
-        loss = criterion(output, targets)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-
-        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-        top1.update(t1.item(), output.size(0))
-        top5.update(t5.item(), output.size(0))
-        losses.update(loss.item(), output.size(0))
-        batch_time.update(time.time() - t0)
-        t0 = time.time()
-        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
-                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
-                lr_scheduler.get_lr()[0]), log_file)
-
-def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
-    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
-    with torch.no_grad():
-        model.eval()
-        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
-        for batch_idx, (inputs, seq_lengths, targets) in enumerate(test_iterator):
-            inputs = torch.tensor(inputs).cuda()
-            targets = torch.tensor(targets).cuda()
-
-            inputs = inputs.transpose(1, 0)
-            output = model(inputs, seq_lengths)
-            
-            loss = criterion(output, targets)
-
-            t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
-            top1.update(t1.item(), output.size(0))
-            top5.update(t5.item(), output.size(0))                
-            losses.update(loss.item(), output.size(0))
-
-            print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
-                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
-
-        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
-    return top1.avg
+from utils.train_utils import load_lr_scheduler, train, test, train_attn, test_attn
 
 def main():
     args, model_name = parse_args('lstm', val=False)
@@ -99,9 +36,9 @@ def main():
     print_and_save(args, log_file)
     print_and_save("Model name: {}".format(model_name), log_file)
 
-    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands
-
-    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, args.dropout)
+    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
+    kwargs = {'dropout':args.dropout, 'max_seq_len':args.lstm_seq_size}
+    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
@@ -148,13 +85,14 @@ def main():
 
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
+    train_fun, test_fun = (train_attn, test_attn) if args.lstm_attn else (train, test)
     new_top1, top1 = 0.0, 0.0
     for epoch in range(args.max_epochs):
-        train(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
+        train_fun(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
-            new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
+                test_fun(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
+            new_top1 = test_fun(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)

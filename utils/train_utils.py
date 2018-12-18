@@ -212,6 +212,73 @@ def load_lr_scheduler(lr_type, lr_steps, optimizer, train_iterator_length):
         sys.exit("Unsupported lr type")
     return lr_scheduler
 
+def train_attn(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
+    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
+    
+    print_and_save('*********', log_file)
+    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
+    t0 = time.time()
+    for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()
+        
+        inputs = torch.tensor(inputs, requires_grad=True).cuda()
+        targets = torch.tensor(targets).cuda()
+
+        inputs = inputs.transpose(1, 0)
+        outputs, attn_weights = model(inputs, seq_lengths)
+
+        loss = 0
+        for output in outputs:
+            loss += criterion(output, targets)
+        loss /= len(outputs)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        t1, t5 = accuracy(outputs[-1].detach().cpu(), targets.cpu(), topk=(1,5))
+        top1.update(t1.item(), outputs[-1].size(0))
+        top5.update(t5.item(), outputs[-1].size(0))
+        losses.update(loss.item(), outputs[-1].size(0))
+        batch_time.update(time.time() - t0)
+        t0 = time.time()
+        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                lr_scheduler.get_lr()[0]), log_file)
+
+def test_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+    with torch.no_grad():
+        model.eval()
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+        for batch_idx, (inputs, seq_lengths, targets) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            targets = torch.tensor(targets).cuda()
+
+            inputs = inputs.transpose(1, 0)
+            outputs, attn_weights = model(inputs, seq_lengths)
+    
+            loss = 0
+            for output in outputs:
+                loss += criterion(output, targets)
+            loss /= len(outputs)
+
+            t1, t5 = accuracy(outputs[-1].detach().cpu(), targets.cpu(), topk=(1,5))
+            top1.update(t1.item(), outputs[-1].size(0))
+            top5.update(t5.item(), outputs[-1].size(0))                
+            losses.update(loss.item(), outputs[-1].size(0))
+
+            print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
+                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+    return top1.avg
+
 def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()

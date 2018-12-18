@@ -17,17 +17,19 @@ import torch
 import torch.utils.data
 import torch.backends.cudnn as cudnn
 
-from models.lstm_hands import LSTM_Hands, LSTM_per_hand
+from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 
+from matplotlib import pyplot as plt
+
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
 torch.set_printoptions(linewidth=1000000, threshold=1000000)
 
-def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file, args):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     outputs = []
     
@@ -60,8 +62,79 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file)
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg, outputs
 
-norm_val = [456., 256., 456., 256.]
+def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file, args):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+    predictions = []
+    all_predictions = torch.zeros((0, args.lstm_seq_size, 1))
+    all_attentions = torch.zeros((0, args.lstm_seq_size, args.lstm_seq_size))
+    all_targets = torch.zeros((0, 1))
+    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, seq_lengths, targets, video_names) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            targets = torch.tensor(targets).cuda()
 
+            inputs = inputs.transpose(1,0)
+            outputs, attn_weights = model(inputs, seq_lengths)         
+            
+            loss = 0
+            for output in outputs:
+                loss += criterion(output, targets)
+            loss /= len(outputs)
+            
+            outputs = torch.stack(outputs)
+            outputs = torch.argmax(outputs,dim=2).detach().cpu()
+            all_predictions = torch.cat((all_predictions, torch.transpose(outputs, 0, 1).float()), dim=0)
+            outputs = outputs.numpy()
+            outputs = [np.bincount(outputs[:,kk]).argmax() for kk in range(len(outputs[0]))]
+            attn_weights = torch.stack(attn_weights)
+            attn_weights = torch.transpose(attn_weights, 0, 1).detach().cpu()
+            all_attentions = torch.cat((all_attentions, attn_weights), dim=0)
+            all_targets = torch.cat((all_targets, targets.detach().cpu().float()), dim=0)
+            
+            batch_preds = []
+            for j in range(len(outputs)):
+                res = outputs[j]
+                label = targets[j].cpu().numpy()
+                predictions.append([res, label])
+                batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
+
+            t1, t5 = accuracy(output.detach().cpu(), 
+                              targets.detach().cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
+            losses.update(loss.item(), output.size(0))
+
+            print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
+                    batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
+            break
+        all_predictions = all_predictions.numpy().astype(np.int)
+        all_targets = all_targets.numpy().astype(np.int)
+        showAttention(args.lstm_seq_size, all_predictions[0], all_targets[0], all_attentions[0])
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+    return top1.avg, predictions
+
+import matplotlib.ticker as ticker
+def showAttention(sequence_size, predictions, target, attentions):
+    # Set up figure with colorbar
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.set_title("class of sequence {}".format(target))
+    cax = ax.matshow(attentions.numpy(), cmap='bone')
+    fig.colorbar(cax)
+
+    # Set up axes
+    ax.set_xticklabels(list(range(sequence_size)))
+    ax.set_yticklabels(list(predictions))
+
+    # Show label at every tick
+    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
+
+    plt.show()
+
+norm_val = [456., 256., 456., 256.]
 def main():
     args = parse_args('lstm', val=True)
     
@@ -78,11 +151,12 @@ def main():
     
     norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
         
-    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands
+    lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
+    kwargs = {'dropout':args.dropout, 'max_seq_len':args.lstm_seq_size}
     
-    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, args.dropout)
+    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, **kwargs)
     collate_fn = lstm_collate
-    validate = validate_lstm    
+    validate = validate_lstm_attn if args.lstm_attn else validate_lstm   
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
     cudnn.benchmark = True
@@ -114,7 +188,7 @@ def main():
     
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
 
-    top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], val_list.split("\\")[-1], log_file)
+    top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], val_list.split("\\")[-1], log_file, args)
 
     #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
     #video_labels = [x[1].cpu().numpy() for x in outputs]
