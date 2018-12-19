@@ -63,12 +63,18 @@ def parse_args_dataset(parser, net_type):
     # Dataset parameters
     parser.add_argument('--verb_classes', type=int, default=120)
     parser.add_argument('--batch_size', type=int, default=1)
+    if net_type in ['resnet', 'mfnet']:
+        parser.add_argument('--clip_gradient', action='store_true')
     if net_type == 'resnet':
         parser.add_argument('--no_resize', default=False, action='store_true', help='keep the original 256x456 image size for the network input')
         parser.add_argument('--inter', type=str, default='cubic',
                             choices=['linear', 'cubic', 'nn', 'area', 'lanc', 'linext'])
         parser.add_argument('--bin_img', default=False, action='store_true')
         parser.add_argument('--pad', default=False, action='store_true')
+    elif net_type == 'mfnet':
+        parser.add_argument('--clip_length', type=int, default=16, help="define the length of each input sample.")
+        parser.add_argument('--frame_interval', type=int, default=2, help="define the sampling interval between frames.")
+        #parser.add_argument('--img_tmpl', type=str)
     elif net_type == 'lstm':
         parser.add_argument('--lstm_feature', default='coords',
                             choices=['coords', 'coords_dual', 'vec_sum', 'vec_sum_dual'],
@@ -83,13 +89,16 @@ def parse_args_dataset(parser, net_type):
     
 def parse_args_network(parser, net_type):
     # Network configuration
+    if net_type in ['resnet', 'mfnet']:
+        parser.add_argument('--pretrained', default=False, action='store_true')
     if net_type == 'resnet':
         parser.add_argument('--resnet_version', type=str, default='18', 
                             choices=['18','34','50','101','152'], 
                             help="One of 18, 34, 50, 101, 152")
-        parser.add_argument('--pretrained', default=False, action='store_true')
-        parser.add_argument('--feature_extraction', default=False, action='store_true')
         parser.add_argument('--channels', default='RGB', choices=['RGB', 'G'], help="optional to train on one input channel with binary inputs.")
+        parser.add_argument('--feature_extraction', default=False, action='store_true')
+    elif net_type == 'mfnet':
+        parser.add_argument('--pretrained_model_path', type=str, default=r"models\MFNet3D_Kinetics-400_72.8.pth")
     elif net_type == 'lstm':
         parser.add_argument('--lstm_input', type=int, default=4)
         parser.add_argument('--lstm_hidden', type=int, default=8)
@@ -106,14 +115,15 @@ def parse_args_training(parser):
     parser.add_argument('--mixup_a', type=float, default=1)
     parser.add_argument('--lr', type=float, default=0.001)
     parser.add_argument('--lr_type', type=str, default='step',
-                        choices=['step', 'multistep', 'clr'])
+                        choices=['step', 'multistep', 'clr', 'groupmultistep'])
     parser.add_argument('--lr_steps', nargs='+', type=str, default=[7],
                         help="The value of lr_steps depends on lr_type. If lr_type is:"\
                             +"'step' then lr_steps is a list of size 2 that contains the number of epochs needed to reduce the lr at lr_steps[0] and the gamma to reduce by, at lr_steps[1]."\
                             +"'multistep' then lr_steps is a list of size n+1 for n number of learning rate decreases and the gamma to reduce by at lr_steps[-1]."\
-                            +"'clr' then lr_steps is a list of size 6: [base_lr, max_lr, num_epochs_up, num_epochs_down, mode, gamma]. In the clr case, argument 'lr' is ignored.")
+                            +"'clr' then lr_steps is a list of size 6: [base_lr, max_lr, num_epochs_up, num_epochs_down, mode, gamma]. In the clr case, argument 'lr' is ignored."\
+                            +"'groupmultistep' then the arguments are used like 'multistep' but internally different learning rate is applied to different parameter groups.")
     parser.add_argument('--momentum', type=float, default=0.9)
-    parser.add_argument('--decay', type=float, default=0.0005)
+    parser.add_argument('--decay', type=float, default=0.0005) # decay for mfnet is 0.0001
     parser.add_argument('--max_epochs', type=int, default=20)
     
     return parser
@@ -164,7 +174,11 @@ def make_model_name(args, net_type):
             model_name = model_name + "_pad"
         else:
             model_name = model_name + "_nopad"
-        
+    elif net_type == 'mfnet':
+        model_name = "mfnet_{}_{}_{}_cl{}".format(args.batch_size, args.dropout,
+                            args.max_epochs, args.clip_length)
+        if args.pretrained:
+            model_name = model_name + "_pt"
     elif net_type == 'lstm':
         model_name = "lstm"
         model_name = model_name + "_{}_{}_{}".format(args.batch_size, 

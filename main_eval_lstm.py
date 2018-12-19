@@ -150,49 +150,38 @@ norm_val = [456., 256., 456., 256.]
 def main():
     args = parse_args('lstm', val=True)
     
-    verb_classes = args.verb_classes
-    
-    ckpt_path = args.ckpt_path
-    val_list = args.val_list
-    
-    output_dir = os.path.dirname(ckpt_path)
-    
+    output_dir = os.path.dirname(args.ckpt_path)
     log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
-    
     print_and_save(args, log_file)
-    
-    norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
+    cudnn.benchmark = True
         
     lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
-    kwargs = {'dropout':args.dropout, 'max_seq_len':args.lstm_seq_size}
-    
-    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, **kwargs)
-    collate_fn = lstm_collate
-#    collate_fn = torch.utils.data.dataloader.default_collate
-    validate = validate_lstm_attn if args.lstm_attn else validate_lstm   
+    kwargs = {'dropout':args.dropout, 'max_seq_len':args.lstm_seq_size}    
+    model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
-    print_and_save("Model loaded to gpu", log_file)
-    cudnn.benchmark = True
-    checkpoint = torch.load(ckpt_path)    
+    checkpoint = torch.load(args.ckpt_path)    
     model_ft.load_state_dict(checkpoint['state_dict'])
+    print_and_save("Model loaded to gpu", log_file)
 
-
+    norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
     if args.lstm_feature == "coords" or args.lstm_feature == "coords_dual":
         if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
             sys.exit("Clamped tracks require dual lstms and a fixed lstm sequence size.")
-        dataset_loader = PointDatasetLoader(val_list, max_seq_length=args.lstm_seq_size,
-                                            num_classes=verb_classes, norm_val=norm_val,
+        dataset_loader = PointDatasetLoader(args.val_list, max_seq_length=args.lstm_seq_size,
+                                            num_classes=args.verb_classes, norm_val=norm_val,
                                             dual=args.lstm_dual, clamp=args.lstm_clamped,
                                             validation=True)
     elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
-        dataset_loader = PointVectorSummedDatasetLoader(val_list,
+        dataset_loader = PointVectorSummedDatasetLoader(args.val_list,
                                                         max_seq_length=args.lstm_seq_size,
-                                                        num_classes=verb_classes,
+                                                        num_classes=args.verb_classes,
                                                         dual=args.lstm_dual, 
                                                         validation=True)
     else:
         sys.exit("Unsupported lstm feature")
 
+    collate_fn = lstm_collate
+#    collate_fn = torch.utils.data.dataloader.default_collate
     dataset_iterator = torch.utils.data.DataLoader(dataset_loader, 
                                                    batch_size=args.batch_size, 
                                                    num_workers=args.num_workers, 
@@ -201,7 +190,8 @@ def main():
     
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
 
-    top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], val_list.split("\\")[-1], log_file, args)
+    validate = validate_lstm_attn if args.lstm_attn else validate_lstm
+    top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file, args)
 
     #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
     #video_labels = [x[1].cpu().numpy() for x in outputs]

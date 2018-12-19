@@ -192,7 +192,31 @@ class LRRangeTest(_LRScheduler):
         lr = self.lr_steps[lr_ind]
         lrs.append(lr)
         return lrs
-        
+    
+class GroupMultistep(_LRScheduler):
+    def __init__(self, optimizer, milestones, gamma=0.1, last_epoch=-1):
+        if not list(milestones) == sorted(milestones):
+            raise ValueError('Milestones should be a list of'
+                             ' increasing integers. Got {}', milestones)
+        self.milestones = milestones
+        self.gamma = gamma
+        super(GroupMultistep, self).__init__(optimizer, last_epoch)
+    
+    def get_lr(self):
+        lr_decay = 0.1 ** sum(self.epoch >= np.array(self.milestones))
+        lr = self.base_lrs[0] * lr_decay #self.base_lrs is a list created from the optimizer, in the constructor of _LRScheduler
+        return lr
+    
+    def step(self, epoch):
+        if epoch is None:
+            self.epoch = self.last_epoch + 1
+        for param_group in self.optimizer.param_groups:
+            if 'lr_mult' in param_group:
+                lr_mult = param_group['lr_mult']
+            else:
+                lr_mult = 1.0
+            param_group['lr'] = self.get_lr() * lr_mult  
+    
 def load_lr_scheduler(lr_type, lr_steps, optimizer, train_iterator_length):
     lr_scheduler = None
     if lr_type == 'step':
@@ -208,11 +232,40 @@ def load_lr_scheduler(lr_type, lr_steps, optimizer, train_iterator_length):
                                 max_lr=float(lr_steps[1]), step_size_up=int(lr_steps[2])*train_iterator_length,
                                 step_size_down=int(lr_steps[3])*train_iterator_length, mode=str(lr_steps[4]),
                                 gamma=float(lr_steps[5]))
+    elif lr_type == 'groupmultistep':
+        lr_scheduler = GroupMultistep(optimizer,
+                                      milestones=[int(x) for x in lr_steps[:-1]],
+                                      gamma=float(lr_steps[-1]))
     else:
         sys.exit("Unsupported lr type")
     return lr_scheduler
 
-def train_attn(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
+def mixup_data(x, y, alpha=1.0, use_cuda=True):
+    '''Returns mixed inputs, pairs of targets, and lambda'''
+    if alpha > 0:
+        lam = np.random.beta(alpha, alpha)
+    else:
+        lam = 1
+
+    batch_size = x.size()[0]
+    if use_cuda:
+        index = torch.randperm(batch_size).cuda(device=0)
+    else:
+        index = torch.randperm(batch_size)
+
+    mixed_x = lam * x + (1 - lam) * x[index, :]
+    y_a, y_b = y, y[index]
+    return mixed_x, y_a, y_b, lam
+
+
+def mixup_criterion(criterion, pred, y_a, y_b, lam):
+    pred=pred.to(torch.device("cuda:{}".format(0)))
+    y_a=y_a.to(torch.device("cuda:{}".format(0)))
+    y_b=y_b.to(torch.device("cuda:{}".format(0)))
+    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
+
+def train_attn_lstm(model, optimizer, criterion, train_iterator, cur_epoch, 
+                    log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
     
@@ -251,7 +304,7 @@ def train_attn(model, optimizer, criterion, train_iterator, cur_epoch, log_file,
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
                 lr_scheduler.get_lr()[0]), log_file)
 
-def test_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+def test_attn_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
@@ -279,7 +332,7 @@ def test_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file):
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
-def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
+def train_lstm(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
     
@@ -320,7 +373,7 @@ def train(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_s
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
                 lr_scheduler.get_lr()[0]), log_file)
 
-def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+def test_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
@@ -337,6 +390,78 @@ def test(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
             top1.update(t1.item(), output.size(0))
             top5.update(t5.item(), output.size(0))                
+            losses.update(loss.item(), output.size(0))
+
+            print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
+                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+    return top1.avg
+
+#def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, lr_scheduler=None, clip_gradient=False):
+def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, lr_scheduler=None):
+    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
+    
+    print_and_save('*********', log_file)
+    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
+    t0 = time.time()
+    for batch_idx, (inputs, targets) in enumerate(train_iterator):
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()
+            
+        inputs = torch.tensor(inputs, requires_grad=True).cuda()
+        targets = torch.tensor(targets).cuda()
+
+        if mixup_alpha != 1:
+            inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, mixup_alpha)
+        
+        output = model(inputs)
+
+        if mixup_alpha != 1:
+            loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
+        else:
+            loss = criterion(output, targets)
+
+        optimizer.zero_grad()
+        loss.backward()
+        
+#        if clip_gradient is not None:
+#            total_norm = torch.nn.clip_grad_norm_(model.parameters(), clip_gradient)
+#            if total_norm > clip_gradient:
+#                to_print = "clipping gradient: {} with coef {}".format(total_norm, clip_gradient / total_norm)
+#                print_and_save(to_print, log_file)
+        
+        optimizer.step()
+
+        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        top1.update(t1.item(), output.size(0))
+        top5.update(t5.item(), output.size(0))
+        losses.update(loss.item(), output.size(0))
+        batch_time.update(time.time() - t0)
+        t0 = time.time()
+        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                lr_scheduler.get_lr()[0]), log_file)
+
+def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+    with torch.no_grad():
+        model.eval()
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+        for batch_idx, (inputs, targets) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            targets = torch.tensor(targets).cuda()
+
+            output = model(inputs)
+            loss = criterion(output, targets)
+
+            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
             losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(

@@ -1,43 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-Created on Thu Nov 15 14:24:00 2018
+Created on Thu Dec 20 00:06:13 2018
 
-main_eval.py 
-
-Used for evaluation of a model and outputs a confusion matrix, top1, top5 and per class accuracy metrics
-
-for resnet models
+main eval mfnet
 
 @author: Γιώργος
 """
 
 import os
 import numpy as np
-import cv2
 
 import torch
-import torch.utils.data
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
-from models.resnet_zoo import resnet_loader
-from utils.dataset_loader import ImageDatasetLoader
-from utils.dataset_loader_utils import WidthCrop, Resize, ResizePadFirst, To01Range
-from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
+from models.mfnet_3d import MFNET_3D
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
+from utils.dataset_loader import VideoDatasetLoader
+from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid
+from utils.video_sampler import RandomSampling
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
 torch.set_printoptions(linewidth=1000000, threshold=1000000)
-
-meanRGB=[0.485, 0.456, 0.406]
-stdRGB=[0.229, 0.224, 0.225]
-meanG = [0.5]
-stdG = [1.]
-
-interpolation_methods = {'linear':cv2.INTER_LINEAR, 'cubic':cv2.INTER_CUBIC,
-                         'nn':cv2.INTER_NEAREST, 'area':cv2.INTER_AREA,
-                         'lanc':cv2.INTER_LANCZOS4, 'linext':cv2.INTER_LINEAR_EXACT}
+mean_3d = [124 / 255, 117 / 255, 104 / 255]
+std_3d = [0.229, 0.224, 0.225]
 
 def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_file):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
@@ -70,49 +57,34 @@ def validate_resnet(model, criterion, test_iterator, cur_epoch, dataset, log_fil
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg, outputs
 
-
 def main():
-    args = parse_args('resnet', val=True)
+    args = parse_args('mfnet', val=True)
     
     output_dir = os.path.dirname(args.ckpt_path)
     log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
     print_and_save(args, log_file)
     cudnn.benchmark = True
-
-    model_ft = resnet_loader(args.verb_classes, 0, False, False, args.resnet_version, 
-                         1 if args.channels == 'G' else 3, args.no_resize)
-    model_ft = torch.nn.DataParallel(model_ft).cuda()
-    checkpoint = torch.load(args.ckpt_path)
-    # below line is needed if network is trained with DataParallel and now the model is not initiated with dataparallel
-#    base_dict = {'.'.join(k.split('.')[1:]): v for k,v in list(checkpoint['state_dict'].items())}
-#    model_ft.load_state_dict(base_dict) 
-    model_ft.load_state_dict(checkpoint['state_dict'])
-    print_and_save("Model loaded to gpu", log_file)
-
-    mean = meanRGB if args.channels == 'RGB' else meanG
-    std = stdRGB if args.channels == 'RGB' else stdG
-    normalize = transforms.Normalize(mean=mean, std=std)
-    if args.no_resize:
-        resize = WidthCrop()
-    else:
-        if args.pad:
-            resize = ResizePadFirst(224, False, interpolation_methods[args.inter]) # currently set this binarize to False, because it is false duh
-        else:
-            resize = Resize((224,224), False, interpolation_methods[args.inter])
-    test_transforms = transforms.Compose([resize, To01Range(args.bin_img),
-                                      transforms.ToTensor(), normalize])
-    dataset_loader = ImageDatasetLoader(args.val_list, num_classes=args.verb_classes, 
-                                        batch_transform=test_transforms, channels=args.channels,
-                                        validation=True)
-    collate_fn = torch.utils.data.dataloader.default_collate
-    dataset_iterator = torch.utils.data.DataLoader(dataset_loader, 
-                                                   batch_size=args.batch_size, 
-                                                   num_workers=args.num_workers, 
-                                                   collate_fn=collate_fn, 
-                                                   pin_memory=True)
-
-    ce_loss = torch.nn.CrossEntropyLoss().cuda()
     
+    model_ft = MFNET_3D(args.num_classes)
+    model_ft = torch.nn.DataParallel(model_ft).cuda()
+    checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1':'cuda:0'})
+    model_ft.load_state_dict(checkpoint['state_dict'])
+    print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
+    
+    val_sampler = RandomSampling(num=args.clip_length,
+                                 interval=args.frame_interval,
+                                 speed=[1.0, 1.0])
+    val_transforms = transforms.Compose([Resize((256,256), False), RandomCrop((224,224)),
+                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+    val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
+                                    num_classes=args.verb_classes, val_transforms)
+    val_iter = torch.utils.data.DataLoader(val_loader,
+                                           batch_size=args.batch_size,
+                                           shuffle=False,
+                                           num_workers=args.num_workers,
+                                           pin_memory=True)
+
+    criterion = torch.nn.CrossEntropyLoss().cuda()
     validate = validate_resnet
     top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 

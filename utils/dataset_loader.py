@@ -8,6 +8,7 @@ Image dataset loader for a .txt file with a sample per line in the format
 @author: Γιώργος
 """
 
+import os
 import pickle
 import cv2
 import numpy as np
@@ -40,20 +41,20 @@ def make_class_mapping(samples_list):
         mapping_dict[c] = i
     return mapping_dict
 
-def parse_samples_list(list_file):
-    return [ImageData(x.strip().split(' ')) for x in open(list_file)]
+def parse_samples_list(list_file, DataType):
+    return [DataType(x.strip().split(' ')) for x in open(list_file)]
 
 def load_pickle(tracks_path):
     with open(tracks_path,'rb') as f:
         tracks = pickle.load(f)
     return tracks
 
-class ImageData(object):
+class DataLine(object):
     def __init__(self, row):
         self.data = row
 
     @property
-    def image_path(self):
+    def data_path(self):
         return self.data[0]
 
     @property
@@ -68,7 +69,7 @@ class ImageData(object):
     def label_noun(self):
         return int(self.data[3])
 
-class DatasetLoader(torch.utils.data.Dataset):
+class ImageDatasetLoader(torch.utils.data.Dataset):
 
     def __init__(self, list_file, num_classes=120,
                  batch_transform=None, channels='RGB', validation=False ):
@@ -86,7 +87,7 @@ class DatasetLoader(torch.utils.data.Dataset):
         return len(self.samples_list)
 
     def __getitem__(self, index):
-        img = cv2.imread(self.samples_list[index].image_path, self.image_read_type).astype(np.float32)
+        img = cv2.imread(self.samples_list[index].data_path, self.image_read_type).astype(np.float32)
         if self.channels=='RGB':
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
@@ -101,8 +102,56 @@ class DatasetLoader(torch.utils.data.Dataset):
         if not self.validation:
             return img, class_id
         else:
-            name_parts = self.samples_list[index].image_path.split("\\")
+            name_parts = self.samples_list[index].data_path.split("\\")
             return img, class_id, name_parts[-2] + "\\" + name_parts[-1]
+
+class VideoDatasetLoader(torch.utils.data.Dataset):
+
+    def __init__(self, sampler, list_file, num_classes = 120, 
+                 image_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
+        self.sampler = sampler
+        self.video_list = self.parse_samples_list(list_file)
+        if num_classes != 120:
+            self.mapping = make_class_mapping(self.samples_list)
+        else:
+            self.mapping = None
+        self.image_tmpl = image_tmpl
+        self.transform = batch_transform
+        self.validation = validation
+
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, index):
+        frame_count=self.video_list[index].num_frames
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index)
+
+        sampled_frames = self.load_images(index, sampled_idxs)
+
+        clip_input = np.concatenate(sampled_frames, axis=2)
+
+        if self.transform is not None:
+            clip_input = self.transform(clip_input)
+            
+        if self.mapping:
+            class_id = self.mapping[self.video_list[index].label_verb]
+        else:
+            class_id = self.video_list[index].label_verb
+
+        if not self.validation:
+            return clip_input, class_id
+        else:
+            return clip_input, class_id, self.video_list[index].data_path.split("\\")[-1]
+
+    def load_images(self, video_index, frame_indices):
+        images = []
+        for f_ind in frame_indices:
+            im_name = os.path.join(self.video_list[video_index].data_path,
+                                   self.image_tmpl.format(f_ind))
+            next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
+            next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
+            images.append(next_image)
+        return images
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, batch_transform=None, 
@@ -118,13 +167,13 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.max_seq_length = max_seq_length
         self.clamp = clamp
         
-        self.data_arr = [load_pickle(self.samples_list[index].image_path) for index in range(len(self.samples_list))]
+        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
           
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-#        hand_tracks = load_pickle(self.samples_list[index].image_path)
+#        hand_tracks = load_pickle(self.samples_list[index].data_path)
         hand_tracks = self.data_arr[index]
         
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
@@ -154,7 +203,7 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         if not self.validation:
             return points, seq_size, class_id
         else:
-            name_parts = self.samples_list[index].image_path.split("\\")
+            name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
@@ -169,13 +218,13 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         self.max_seq_length = max_seq_length
         self.dual = dual
         
-        self.data_arr = [load_pickle(self.samples_list[index].image_path) for index in range(len(self.samples_list))]
+        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
         
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-#        hand_tracks = load_pickle(self.samples_list[index].image_path)
+#        hand_tracks = load_pickle(self.samples_list[index].data_path)
         hand_tracks = self.data_arr[index]
         left_track = np.array(hand_tracks['left'], dtype=np.int)
         right_track = np.array(hand_tracks['right'], dtype=np.int)   
@@ -211,7 +260,7 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         if not self.validation:
             return vec, seq_size, class_id
         else:
-            name_parts = self.samples_list[index].image_path.split("\\")
+            name_parts = self.samples_list[index].data_path.split("\\")
             return vec, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
                 
 
@@ -228,7 +277,7 @@ class PointImageDatasetLoader(torch.utils.data.Dataset):
         return len(self.samples_list)
 
     def __getitem__(self, index):
-        hand_tracks = load_pickle(self.samples_list[index].image_path)
+        hand_tracks = load_pickle(self.samples_list[index].data_path)
         left_track = np.array(hand_tracks['left'], dtype=np.int)
         right_track = np.array(hand_tracks['right'], dtype=np.int)
     

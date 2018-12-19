@@ -7,11 +7,23 @@ file_utils
 @author: GEO
 """
 import os
+import sys
 import torch
 import shutil
 from datetime import datetime
 import pandas as pd
 from matplotlib import pyplot as plt
+
+def init_folders(base_output_dir, model_name, resume, logging):
+    output_dir = os.path.join(base_output_dir, model_name)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    else:
+        if not resume:
+            sys.exit("Attempted to overwrite previous folder, exiting..")
+    
+    log_file = os.path.join(base_output_dir, model_name, model_name+".txt") if logging else None
+    return output_dir, log_file
 
 def print_and_save(text, path):
     print(text)
