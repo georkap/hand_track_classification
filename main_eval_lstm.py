@@ -68,6 +68,7 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
     all_predictions = torch.zeros((0, args.lstm_seq_size, 1))
     all_attentions = torch.zeros((0, args.lstm_seq_size, args.lstm_seq_size))
     all_targets = torch.zeros((0, 1))
+    all_video_names = []
     print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
     with torch.no_grad():
         model.eval()
@@ -92,6 +93,7 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
             attn_weights = torch.transpose(attn_weights, 0, 1).detach().cpu()
             all_attentions = torch.cat((all_attentions, attn_weights), dim=0)
             all_targets = torch.cat((all_targets, targets.detach().cpu().float()), dim=0)
+            all_video_names = all_video_names + video_names
             
             batch_preds = []
             for j in range(len(outputs)):
@@ -108,32 +110,42 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
-            break
-        all_predictions = all_predictions.numpy().astype(np.int)
-        all_targets = all_targets.numpy().astype(np.int)
-        showAttention(args.lstm_seq_size, all_predictions[0], all_targets[0], all_attentions[0])
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+        
+        if args.save_attentions:
+            all_predictions = all_predictions.numpy().astype(np.int)
+            all_targets = all_targets.numpy().astype(np.int)
+            output_dir = os.path.join(os.path.dirname(log_file), "figures")
+            os.makedirs(output_dir, exist_ok=True)
+            for i in range(len(all_targets)):
+                name_parts = all_video_names[i].split("\\")[-2:]
+                output_file = os.path.join(output_dir, "{}_{}.png".format(name_parts[0], name_parts[1].split('.')[0]))
+                showAttention(args.lstm_seq_size, all_predictions[i], all_targets[i], all_attentions[i], output_file)
+     
     return top1.avg, predictions
 
 import matplotlib.ticker as ticker
-def showAttention(sequence_size, predictions, target, attentions):
+def showAttention(sequence_size, predictions, target, attentions, output_file=None):
     # Set up figure with colorbar
-    fig = plt.figure()
+    fig = plt.figure(figsize=(10,8))
     ax = fig.add_subplot(111)
     ax.set_title("class of sequence {}".format(target))
     cax = ax.matshow(attentions.numpy(), cmap='bone')
     fig.colorbar(cax)
 
     # Set up axes
-    ax.set_xticklabels(list(range(sequence_size)))
+    ax.set_xticklabels(list(range(sequence_size+1)))
     ax.set_yticklabels(list(predictions))
 
     # Show label at every tick
     ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
     ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
-
-    plt.show()
-
+    plt.tight_layout()
+    if output_file == None:
+        plt.show()
+    else:
+        fig.savefig(output_file)
+    plt.close()
 norm_val = [456., 256., 456., 256.]
 def main():
     args = parse_args('lstm', val=True)
@@ -156,6 +168,7 @@ def main():
     
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, verb_classes, **kwargs)
     collate_fn = lstm_collate
+#    collate_fn = torch.utils.data.dataloader.default_collate
     validate = validate_lstm_attn if args.lstm_attn else validate_lstm   
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     print_and_save("Model loaded to gpu", log_file)
