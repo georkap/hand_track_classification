@@ -13,20 +13,20 @@ class RandomSampling(object):
         self.speed = speed
         self.rng = np.random.RandomState(seed)
 
-    def sampling(self, range_max, v_id=None, prev_failed=False):
+    def sampling(self, range_max, v_id=None, prev_failed=False, start_frame=0):
         assert range_max > 0, \
             ValueError("range_max = {}".format(range_max))
         interval = self.rng.choice(self.interval)
         if self.num == 1:
-            return [self.rng.choice(range(0, range_max))]
+            return [self.rng.choice(range(start_frame, start_frame+range_max))]
         # sampling
         speed_min = self.speed[0]
         speed_max = min(self.speed[1], (range_max-1)/((self.num-1)*interval))
         if speed_max < speed_min:
-            return [self.rng.choice(range(0, range_max))] * self.num
+            return [self.rng.choice(range(start_frame, start_frame+range_max))] * self.num
         random_interval = self.rng.uniform(speed_min, speed_max) * interval
         frame_range = (self.num-1) * random_interval
-        clip_start = self.rng.uniform(0, (range_max-1) - frame_range)
+        clip_start = self.rng.uniform(0, (range_max-1) - frame_range) + start_frame
         clip_end = clip_start + frame_range
         return np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
 
@@ -40,7 +40,7 @@ class SequentialSampling(object):
         self.fix_cursor = fix_cursor
         self.rng = np.random.RandomState(seed)
 
-    def sampling(self, range_max, v_id, prev_failed=False):
+    def sampling(self, range_max, v_id, prev_failed=False, start_frame=0):
         assert range_max > 0, \
             ValueError("range_max = {}".format(range_max))
         num = self.num
@@ -48,7 +48,9 @@ class SequentialSampling(object):
         frame_range = (num - 1) * interval + 1
         # sampling clips
         if v_id not in self.memory:
-            clips = list(range(0, range_max-(frame_range-1), frame_range))
+            clips = list(range(start_frame,
+                               start_frame+range_max-(frame_range-1),
+                               frame_range))
             if self.shuffle:
                 self.rng.shuffle(clips)
             self.memory[v_id] = [-1, clips]
@@ -75,15 +77,15 @@ if __name__ == "__main__":
 
     logging.info("RandomSampling(): range_max < num")
     for i in range(10):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=2, v_id=1)))
+        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=2, v_id=1, start_frame=100)))
 
     logging.info("RandomSampling(): range_max == num")
     for i in range(10):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=8, v_id=1)))
+        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=8, v_id=1, start_frame=100)))
 
     logging.info("RandomSampling(): range_max > num")
     for i in range(90):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=30, v_id=1)))
+        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=30, v_id=1, start_frame=100)))
 
 
     """ test SequentialSampling() """
@@ -91,7 +93,7 @@ if __name__ == "__main__":
 
     logging.info("SequentialSampling():")
     for i in range(10):
-        logging.info("{:d}: v_id = {}: {}".format(i, 0, list(sequential_sampler.sampling(range_max=14, v_id=0))))
+        logging.info("{:d}: v_id = {}: {}".format(i, 0, list(sequential_sampler.sampling(range_max=14, v_id=0, start_frame=100))))
         # logging.info("{:d}: v_id = {}: {}".format(i, 1, sequential_sampler.sampling(range_max=9, v_id=1)))
         # logging.info("{:d}: v_id = {}: {}".format(i, 2, sequential_sampler.sampling(range_max=2, v_id=2)))
         # logging.info("{:d}: v_id = {}: {}".format(i, 3, sequential_sampler.sampling(range_max=3, v_id=3)))
