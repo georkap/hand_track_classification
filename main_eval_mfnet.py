@@ -80,7 +80,8 @@ def main():
     val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
                                     num_classes=args.verb_classes, 
                                     batch_transform=val_transforms,
-                                    img_tmpl='frame_{:010d}.jpg')
+                                    img_tmpl='frame_{:010d}.jpg',
+                                    validation=True)
     val_iter = torch.utils.data.DataLoader(val_loader,
                                            batch_size=args.batch_size,
                                            shuffle=False,
