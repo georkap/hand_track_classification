@@ -107,7 +107,7 @@ def main():
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
     new_top1, top1 = 0.0, 0.0
-    for epoch in range(args.epochs):
+    for epoch in range(args.max_epochs):
         train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
