@@ -43,7 +43,7 @@ def main():
     print_and_save("Model name: {}".format(model_name), log_file)    
     cudnn.benchmark = True
 
-    model_ft = MFNET_3D(args.num_classes)
+    model_ft = MFNET_3D(args.verb_classes)
     if args.pretrained:
         checkpoint = torch.load(args.pretrained_model_path)
         # below line is needed if network is trained with DataParallel

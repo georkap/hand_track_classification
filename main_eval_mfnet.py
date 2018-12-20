@@ -66,7 +66,7 @@ def main():
     print_and_save(args, log_file)
     cudnn.benchmark = True
     
-    model_ft = MFNET_3D(args.num_classes)
+    model_ft = MFNET_3D(args.verb_classes)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1':'cuda:0'})
     model_ft.load_state_dict(checkpoint['state_dict'])
