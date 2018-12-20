@@ -6,6 +6,7 @@ main train mfnet
 
 @author: Γιώργος
 """
+import time
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
@@ -15,7 +16,8 @@ from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, init_folders
 from utils.dataset_loader import VideoDatasetLoader
 from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
-from utils.train_utils import load_lr_scheduler, train_cnn, test_cnn
+from utils.train_utils import load_lr_scheduler, CyclicLR, mixup_data, mixup_criterion
+from utils.calc_utils import AverageMeter, accuracy
 from utils.video_sampler import RandomSampling, SequentialSampling
 
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
@@ -34,6 +36,78 @@ def prepare_sampler(sampler_type, clip_length, frame_interval):
                                          shuffle=True)
         out_sampler = val_sampler
     return out_sampler
+
+def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, gpus, lr_scheduler=None):
+    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
+    
+    print_and_save('*********', log_file)
+    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
+    t0 = time.time()
+    for batch_idx, (inputs, targets) in enumerate(train_iterator):
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()
+            
+        inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
+        targets = torch.tensor(targets).cuda(gpus[0])
+
+        # TODO: Fix mixup and cuda integration, especially for mfnet
+        if mixup_alpha != 1:
+            inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, mixup_alpha)
+        
+        output = model(inputs)
+
+        if mixup_alpha != 1:
+            loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
+        else:
+            loss = criterion(output, targets)
+
+        optimizer.zero_grad()
+        loss.backward()
+        
+#        if clip_gradient is not None:
+#            total_norm = torch.nn.clip_grad_norm_(model.parameters(), clip_gradient)
+#            if total_norm > clip_gradient:
+#                to_print = "clipping gradient: {} with coef {}".format(total_norm, clip_gradient / total_norm)
+#                print_and_save(to_print, log_file)
+        
+        optimizer.step()
+
+        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        top1.update(t1.item(), output.size(0))
+        top5.update(t5.item(), output.size(0))
+        losses.update(loss.item(), output.size(0))
+        batch_time.update(time.time() - t0)
+        t0 = time.time()
+        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                lr_scheduler.get_lr()[0]), log_file)
+
+def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+    with torch.no_grad():
+        model.eval()
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+        for batch_idx, (inputs, targets) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda(gpus[0])
+            targets = torch.tensor(targets).cuda(gpus[0])
+
+            output = model(inputs)
+            loss = criterion(output, targets)
+
+            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
+            losses.update(loss.item(), output.size(0))
+
+            print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
+                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+    return top1.avg
 
 def main():
     args, model_name = parse_args('mfnet', val=False)
@@ -108,11 +182,11 @@ def main():
 
     new_top1, top1 = 0.0, 0.0
     for epoch in range(args.max_epochs):
-        train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, lr_scheduler)
+        train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test_cnn(model_ft, ce_loss, train_iterator, epoch, "Train", log_file)
-            new_top1 = test_cnn(model_ft, ce_loss, test_iterator, epoch, "Test", log_file)
+                test_cnn(model_ft, ce_loss, train_iterator, epoch, "Train", log_file, args.gpus)
+            new_top1 = test_cnn(model_ft, ce_loss, test_iterator, epoch, "Test", log_file, args.gpus)
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)
