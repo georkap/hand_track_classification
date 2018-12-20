@@ -62,7 +62,8 @@ def main():
             ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     train_loader = VideoDatasetLoader(train_sampler, args.train_list, 
                                       num_classes=args.verb_classes, 
-                                      batch_transform=train_transforms)
+                                      batch_transform=train_transforms,
+                                      img_tmpl='frame_{:010d}.jpg')
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
@@ -72,7 +73,8 @@ def main():
                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     test_loader = VideoDatasetLoader(test_sampler, args.test_list, 
                                      num_classes=args.verb_classes,
-                                     batch_transform=test_transforms)
+                                     batch_transform=test_transforms,
+                                     img_tmpl='frame_{:010d}.jpg')
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)

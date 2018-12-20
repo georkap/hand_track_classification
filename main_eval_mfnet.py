@@ -18,7 +18,8 @@ from models.mfnet_3d import MFNET_3D
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 from utils.dataset_loader import VideoDatasetLoader
-from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid
+from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize
+from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
 from utils.video_sampler import RandomSampling
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
@@ -77,16 +78,18 @@ def main():
     val_transforms = transforms.Compose([Resize((256,256), False), RandomCrop((224,224)),
                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
-                                    num_classes=args.verb_classes, val_transforms)
+                                    num_classes=args.verb_classes, 
+                                    batch_transform=val_transforms,
+                                    img_tmpl='frame_{:010d}.jpg')
     val_iter = torch.utils.data.DataLoader(val_loader,
                                            batch_size=args.batch_size,
                                            shuffle=False,
                                            num_workers=args.num_workers,
                                            pin_memory=True)
 
-    criterion = torch.nn.CrossEntropyLoss().cuda()
+    ce_loss = torch.nn.CrossEntropyLoss().cuda()
     validate = validate_resnet
-    top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
+    top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
     #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
     #video_labels = [x[1].cpu().numpy() for x in outputs]
