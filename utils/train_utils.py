@@ -200,6 +200,7 @@ class GroupMultistep(_LRScheduler):
                              ' increasing integers. Got {}', milestones)
         self.milestones = milestones
         self.gamma = gamma
+        self.epoch = 0
         super(GroupMultistep, self).__init__(optimizer, last_epoch)
     
     def get_lr(self):
