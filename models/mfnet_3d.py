@@ -13,10 +13,7 @@ from collections import OrderedDict
 
 import torch.nn as nn
 
-try:
-    from . import initializer
-except:
-    import initializer
+from utils import initializer
 
 
 class BN_AC_CONV3D(nn.Module):
