@@ -116,3 +116,6 @@ def main():
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)
+            
+if __name__ == '__main__':
+    main()
