@@ -206,7 +206,7 @@ class GroupMultistep(_LRScheduler):
     def get_lr(self):
         lr_decay = 0.1 ** sum(self.epoch >= np.array(self.milestones))
         lr = self.base_lrs[0] * lr_decay #self.base_lrs is a list created from the optimizer, in the constructor of _LRScheduler
-        return lr
+        return [lr]
     
     def step(self, epoch=None):
         if epoch is None:
@@ -216,7 +216,7 @@ class GroupMultistep(_LRScheduler):
                 lr_mult = param_group['lr_mult']
             else:
                 lr_mult = 1.0
-            param_group['lr'] = self.get_lr() * lr_mult  
+            param_group['lr'] = self.get_lr()[0] * lr_mult  
     
 def load_lr_scheduler(lr_type, lr_steps, optimizer, train_iterator_length):
     lr_scheduler = None
