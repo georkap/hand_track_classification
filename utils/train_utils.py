@@ -208,7 +208,7 @@ class GroupMultistep(_LRScheduler):
         lr = self.base_lrs[0] * lr_decay #self.base_lrs is a list created from the optimizer, in the constructor of _LRScheduler
         return lr
     
-    def step(self, epoch):
+    def step(self, epoch=None):
         if epoch is None:
             self.epoch = self.last_epoch + 1
         for param_group in self.optimizer.param_groups:
