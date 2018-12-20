@@ -112,7 +112,7 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
         if num_classes != 120:
-            self.mapping = make_class_mapping(self.samples_list)
+            self.mapping = make_class_mapping(self.video_list)
         else:
             self.mapping = None
         self.image_tmpl = img_tmpl
