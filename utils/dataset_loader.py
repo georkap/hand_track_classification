@@ -68,6 +68,10 @@ class DataLine(object):
     @property
     def label_noun(self):
         return int(self.data[3])
+    
+    @property
+    def start_frame(self):
+        return int(self.data[5] if len(self.data) == 6 else -1)
 
 class ImageDatasetLoader(torch.utils.data.Dataset):
 
@@ -124,7 +128,10 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         frame_count=self.video_list[index].num_frames
-        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index)
+        start_frame = self.video_list[index].start_frame
+        start_frame = start_frame if start_frame != -1 else 0
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
+                                             start_frame=start_frame)
 
         sampled_frames = self.load_images(index, sampled_idxs)
 

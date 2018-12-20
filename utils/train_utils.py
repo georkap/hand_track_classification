@@ -417,6 +417,7 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         targets = torch.tensor(targets).cuda()
 
+        # TODO: Fix mixup and cuda integration, especially for mfnet
         if mixup_alpha != 1:
             inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, mixup_alpha)
         
