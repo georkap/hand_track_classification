@@ -41,8 +41,8 @@ def make_class_mapping(samples_list):
         mapping_dict[c] = i
     return mapping_dict
 
-def parse_samples_list(list_file, DataType):
-    return [DataType(x.strip().split(' ')) for x in open(list_file)]
+def parse_samples_list(list_file):
+    return [DataLine(x.strip().split(' ')) for x in open(list_file)]
 
 def load_pickle(tracks_path):
     with open(tracks_path,'rb') as f:
