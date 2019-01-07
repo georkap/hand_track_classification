@@ -96,7 +96,7 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
             for i in range(len(maj_vote)): # iteration in the batch size
                 if outputs[:, i].any() != outputs[-1, i]:
                     num_changing_in_seq += 1                    
-                    if maj_vote[i] != outputs[-1, i]:
+                    if maj_vote[i] != outputs[-1, i]: # compare the majority vote to the prediction of the last step in the sequence
                         tar = targets[i].cpu().numpy()
                         if maj_vote[i] == tar:
                             for_the_better.append(video_names[i])
@@ -115,7 +115,7 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
                 predictions.append([res, label])
                 batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
 
-            t1, t5 = accuracy(output.detach().cpu(), 
+            t1, t5 = accuracy(output.detach().cpu(), # use output (instead of outputs) for accuracy; outputs is used for the confusion matrix
                               targets.detach().cpu(), topk=(1,5))
             top1.update(t1.item(), output.size(0))
             top5.update(t5.item(), output.size(0))
@@ -173,7 +173,7 @@ def main():
     cudnn.benchmark = True
         
     lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
-    kwargs = {'dropout':args.dropout, 'max_seq_len':args.lstm_seq_size}    
+    kwargs = {'dropout': 0, 'max_seq_len':args.lstm_seq_size}    
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path)    
