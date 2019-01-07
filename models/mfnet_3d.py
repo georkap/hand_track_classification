@@ -67,7 +67,7 @@ class MF_UNIT(nn.Module):
 
 class MFNET_3D(nn.Module):
 
-    def __init__(self, num_classes, pretrained=False, pretrained_model="", **kwargs):
+    def __init__(self, num_classes, dropout=None, pretrained=False, pretrained_model="", **kwargs):
         super(MFNET_3D, self).__init__()
 
         groups = 16
@@ -138,11 +138,17 @@ class MFNET_3D(nn.Module):
                     ('bn', nn.BatchNorm3d(conv5_num_out)),
                     ('relu', nn.ReLU(inplace=True))
                     ]))
-
-        self.globalpool = nn.Sequential(OrderedDict([
-                        ('avg', nn.AvgPool3d(kernel_size=(8,7,7),  stride=(1,1,1))),
-                        # ('dropout', nn.Dropout(p=0.5)), only for fine-tuning
-                        ]))
+        
+        if dropout:
+            self.globalpool = nn.Sequential(OrderedDict([
+                            ('avg', nn.AvgPool3d(kernel_size=(8,7,7), stride=(1,1,1))),
+                            ('dropout', nn.Dropout(p=dropout)),
+                            ]))
+        else:
+            self.globalpool = nn.Sequential(OrderedDict([
+                            ('avg', nn.AvgPool3d(kernel_size=(8,7,7),  stride=(1,1,1))),
+                            # ('dropout', nn.Dropout(p=0.5)), only for fine-tuning
+                            ]))
         self.classifier = nn.Linear(conv5_num_out, num_classes)
 
 
