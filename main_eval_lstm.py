@@ -65,10 +65,14 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file,
 def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file, args):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     predictions = []
+    # for attention 
     all_predictions = torch.zeros((0, args.lstm_seq_size, 1))
     all_attentions = torch.zeros((0, args.lstm_seq_size, args.lstm_seq_size))
     all_targets = torch.zeros((0, 1))
     all_video_names = []
+    num_changing_in_seq = 0
+    for_the_better, for_the_worse = [], []
+    
     print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
     with torch.no_grad():
         model.eval()
@@ -85,12 +89,21 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
             loss /= len(outputs)
             
             outputs = torch.stack(outputs)
-            outputs = torch.argmax(outputs,dim=2).detach().cpu()
+            outputs = torch.argmax(outputs,dim=2).detach().cpu() # edw exw thn provlepsh gia kathe step tou sequence gia olo to batch
             all_predictions = torch.cat((all_predictions, torch.transpose(outputs, 0, 1).float()), dim=0)
             outputs = outputs.numpy()
-            outputs = [np.bincount(outputs[:,kk]).argmax() for kk in range(len(outputs[0]))]
-            attn_weights = torch.stack(attn_weights)
-            attn_weights = torch.transpose(attn_weights, 0, 1).detach().cpu()
+            maj_vote = [np.bincount(outputs[:,kk]).argmax() for kk in range(len(outputs[0]))] # to argmax kanei majority voting
+            for i in range(len(maj_vote)): # iteration in the batch size
+                if outputs[:, i].any() != outputs[-1, i]:
+                    num_changing_in_seq += 1                    
+                    if maj_vote[i] != outputs[-1, i]:
+                        tar = targets[i].cpu().numpy()
+                        if maj_vote[i] == tar:
+                            for_the_better.append(video_names[i])
+                        elif outputs[-1, i] == tar:
+                            for_the_worse.append(video_names[i])
+            outputs = maj_vote
+            attn_weights = torch.transpose(torch.stack(attn_weights), 0, 1).detach().cpu()
             all_attentions = torch.cat((all_attentions, attn_weights), dim=0)
             all_targets = torch.cat((all_targets, targets.detach().cpu().float()), dim=0)
             all_video_names = all_video_names + video_names
@@ -110,8 +123,12 @@ def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_
 
             print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
-        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
-        
+            
+        print_and_save("Num samples with differences {}".format(num_changing_in_seq), log_file)
+        print_and_save("{} changed for the better\n{}".format(len(for_the_better), for_the_better), log_file)
+        print_and_save("{} changed for the worse\n{}".format(len(for_the_worse), for_the_worse), log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)        
         if args.save_attentions:
             all_predictions = all_predictions.numpy().astype(np.int)
             all_targets = all_targets.numpy().astype(np.int)
@@ -163,6 +180,8 @@ def main():
     model_ft.load_state_dict(checkpoint['state_dict'])
     print_and_save("Model loaded to gpu", log_file)
 
+    if args.only_left and args.only_right:
+        sys.exit("It must be at most one of *only_left* or *only_right* True at any time.")
     norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
     if args.lstm_feature == "coords" or args.lstm_feature == "coords_dual":
         if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
@@ -170,6 +189,7 @@ def main():
         dataset_loader = PointDatasetLoader(args.val_list, max_seq_length=args.lstm_seq_size,
                                             num_classes=args.verb_classes, norm_val=norm_val,
                                             dual=args.lstm_dual, clamp=args.lstm_clamped,
+                                            only_left=args.only_left, only_right=args.only_right,
                                             validation=True)
     elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
         dataset_loader = PointVectorSummedDatasetLoader(args.val_list,

@@ -36,16 +36,20 @@ def main():
         model_ft = resume_checkpoint(model_ft, output_dir, model_name)
     print_and_save("Model loaded to gpu", log_file)
 
+    if args.only_left and args.only_right:
+        sys.exit("It must be at most one of *only_left* or *only_right* True at any time.")
     norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
     if args.lstm_feature == "coords" or args.lstm_feature == "coords_dual":
         if args.lstm_clamped and (not args.lstm_dual or args.lstm_seq_size == 0):
             sys.exit("Clamped tracks require dual lstms and a fixed lstm sequence size.")
         train_loader = PointDatasetLoader(args.train_list, max_seq_length=args.lstm_seq_size,
                                           num_classes=args.verb_classes, norm_val=norm_val,
-                                          dual=args.lstm_dual, clamp=args.lstm_clamped)
+                                          dual=args.lstm_dual, clamp=args.lstm_clamped,
+                                          only_left=args.only_left, only_right=args.only_right)
         test_loader = PointDatasetLoader(args.test_list, max_seq_length=args.lstm_seq_size,
                                          num_classes=args.verb_classes, norm_val=norm_val, 
-                                         dual=args.lstm_dual, clamp=args.lstm_clamped)
+                                         dual=args.lstm_dual, clamp=args.lstm_clamped,
+                                         only_left=args.only_left, only_right=args.only_right)
     elif args.lstm_feature == "vec_sum" or args.lstm_feature == "vec_sum_dual":
         train_loader = PointVectorSummedDatasetLoader(args.train_list, 
                                                       max_seq_length=args.lstm_seq_size,

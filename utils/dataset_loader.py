@@ -161,8 +161,9 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         return images
 
 class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, num_classes=120, batch_transform=None, 
-                 norm_val=[1.,1.,1.,1.], dual=False, clamp=False, validation=False):
+    def __init__(self, list_file, max_seq_length=None, num_classes=120, 
+                 batch_transform=None, norm_val=[1.,1.,1.,1.], dual=False, 
+                 clamp=False, only_left=False, only_right=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
         if num_classes != 120:
             self.mapping = make_class_mapping(self.samples_list)
@@ -173,6 +174,8 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.validation = validation
         self.max_seq_length = max_seq_length
         self.clamp = clamp
+        self.only_left = only_left
+        self.only_right = only_right
         
         self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
           
@@ -199,7 +202,12 @@ class PointDatasetLoader(torch.utils.data.Dataset):
             left_track = left_track[np.linspace(0, len(left_track), self.max_seq_length, endpoint=False, dtype=int)]
             right_track = right_track[np.linspace(0, len(right_track), self.max_seq_length, endpoint=False, dtype=int)]
         
-        points = np.concatenate((left_track, right_track), -1)
+        if self.only_left:
+            points = left_track
+        elif self.only_right:
+            points = right_track
+        else:
+            points = np.concatenate((left_track, right_track), -1)
         seq_size = len(points)
         
         if self.mapping:

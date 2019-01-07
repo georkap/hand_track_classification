@@ -79,7 +79,7 @@ def parse_args_dataset(parser, net_type):
         parser.add_argument('--lstm_feature', default='coords',
                             choices=['coords', 'coords_dual', 'vec_sum', 'vec_sum_dual'],
                             help="lstm_input changes based on the choice."\
-                            + "For: coords 4, coords_dual 2," \
+                            + "For: coords 4, coords with only_left or only_right 2, coords_dual 2," \
                             + "vec_sum 712 (i.e. 256+456), vec_sum_dual 712")
         parser.add_argument('--lstm_clamped', default=False, action='store_true', 
                             help='will remove the non existing hand points in a sequence and result in each hand having a starting sequence of different length. Sampling from these sequences is possible afterwards. Works only for dual lstm and coords feature.')
@@ -106,6 +106,8 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--lstm_dual', default=False, action='store_true')
         parser.add_argument('--lstm_seq_size', type=int, default=0, help="If not 0, it will perform a uniform sampling over the sequence to get to the desired number.")
         parser.add_argument('--lstm_attn', default=False, action='store_true')
+        parser.add_argument('--only_left', default=False, action='store_true')
+        parser.add_argument('--only_right', default=False, action='store_true')
         
     return parser
     
@@ -195,6 +197,10 @@ def make_model_name(args, net_type):
             model_name = model_name + "_clamped"
         if args.no_norm_input:
             model_name = model_name + "_no_norm"
+        if args.only_left:
+            model_name = model_name + "_onlyleft"
+        if args.only_right:
+            model_name = model_name + "_onlyright"
     
     model_name = model_name + "_{}".format(args.lr_type)
     if args.lr_type == "clr":
