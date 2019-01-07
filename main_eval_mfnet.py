@@ -84,7 +84,7 @@ def main():
                                     validation=True)
     val_iter = torch.utils.data.DataLoader(val_loader,
                                            batch_size=args.batch_size,
-                                           shuffle=True,
+                                           shuffle=False,
                                            num_workers=args.num_workers,
                                            pin_memory=True)
 
