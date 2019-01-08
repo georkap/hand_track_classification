@@ -1,28 +1,29 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Dec 19 15:04:16 2018
+Created on Tue Jan  8 16:32:45 2019
 
-main train mfnet
+main mfnet that classifies activities and predicts hand locations
 
 @author: Γιώργος
 """
+
 import time
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
-from models.mfnet_3d import MFNET_3D
+from models.mfnet_3d_hands import MFNET_3D
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, init_folders
-from utils.dataset_loader import VideoDatasetLoader, prepare_sampler
+from utils.dataset_loader import VideoAndPointDatasetLoader, prepare_sampler
 from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
-from utils.train_utils import load_lr_scheduler, CyclicLR, mixup_data, mixup_criterion
+from utils.train_utils import load_lr_scheduler, CyclicLR
 from utils.calc_utils import AverageMeter, accuracy
 
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
-def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, gpus, lr_scheduler=None):
+def train_cnn(model, optimizer, criterion, criterion2, train_iterator, mixup_alpha, cur_epoch, log_file, gpus, lr_scheduler=None):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
     
@@ -37,31 +38,23 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
             lr_scheduler.step()
             
         inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
-        targets = torch.tensor(targets).cuda(gpus[0])
-
-        # TODO: Fix mixup and cuda integration, especially for mfnet
-        if mixup_alpha != 1:
-            inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, mixup_alpha)
+        target_class = torch.tensor(targets[0]).cuda(gpus[0])
+        target_left = torch.tensor(targets[1]).cuda(gpus[0])
+        target_right = torch.tensor(targets[2]).cuda(gpus[0])
         
-        output = model(inputs)
+        output, left, right = model(inputs)
 
-        if mixup_alpha != 1:
-            loss = mixup_criterion(criterion, output, targets_a, targets_b, lam)
-        else:
-            loss = criterion(output, targets)
-
+        cls_loss = criterion(output, target_class)
+        left_loss = criterion2(left, target_left)
+        right_loss = criterion2(right, target_right)
+        loss = cls_loss + left_loss + right_loss
+        
         optimizer.zero_grad()
         loss.backward()
-        
-#        if clip_gradient is not None:
-#            total_norm = torch.nn.clip_grad_norm_(model.parameters(), clip_gradient)
-#            if total_norm > clip_gradient:
-#                to_print = "clipping gradient: {} with coef {}".format(total_norm, clip_gradient / total_norm)
-#                print_and_save(to_print, log_file)
-        
+                
         optimizer.step()
 
-        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        t1, t5 = accuracy(output.detach().cpu(), target_class.cpu(), topk=(1,5))
         top1.update(t1.item(), output.size(0))
         top5.update(t5.item(), output.size(0))
         losses.update(loss.item(), output.size(0))
@@ -71,19 +64,24 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
                 lr_scheduler.get_lr()[0]), log_file)
 
-def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
+def test_cnn(model, criterion, criterion2, test_iterator, cur_epoch, dataset, log_file, gpus):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
         print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
         for batch_idx, (inputs, targets) in enumerate(test_iterator):
-            inputs = torch.tensor(inputs).cuda(gpus[0])
-            targets = torch.tensor(targets).cuda(gpus[0])
+            inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
+            target_class = torch.tensor(targets[0]).cuda(gpus[0])
+            target_left = torch.tensor(targets[1]).cuda(gpus[0])
+            target_right = torch.tensor(targets[2]).cuda(gpus[0])
 
-            output = model(inputs)
-            loss = criterion(output, targets)
+            output, left, right = model(inputs)
+            cls_loss = criterion(output, target_class)
+            left_loss = criterion2(left, target_left)
+            right_loss = criterion2(right, target_right)
+            loss = cls_loss + left_loss + right_loss
 
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+            t1, t5 = accuracy(output.detach().cpu(), target_class.detach().cpu(), topk=(1,5))
             top1.update(t1.item(), output.size(0))
             top5.update(t5.item(), output.size(0))
             losses.update(loss.item(), output.size(0))
@@ -119,10 +117,11 @@ def main():
             RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
             RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
             ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    train_loader = VideoDatasetLoader(train_sampler, args.train_list, 
+    train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list, 
                                       num_classes=args.verb_classes, 
                                       batch_transform=train_transforms,
-                                      img_tmpl='frame_{:010d}.jpg')
+                                      img_tmpl='frame_{:010d}.jpg',
+                                      norm_val=[456., 256., 456., 256.])
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
@@ -130,10 +129,11 @@ def main():
     test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
     test_transforms=transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    test_loader = VideoDatasetLoader(test_sampler, args.test_list, 
+    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list, 
                                      num_classes=args.verb_classes,
                                      batch_transform=test_transforms,
-                                     img_tmpl='frame_{:010d}.jpg')
+                                     img_tmpl='frame_{:010d}.jpg',
+                                     norm_val=[456., 256., 456., 256.])
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
@@ -163,15 +163,16 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
 
     ce_loss = torch.nn.CrossEntropyLoss().cuda(device=args.gpus[0])
+    mse_loss = torch.nn.MSELoss().cuda(device=args.gpus[0])
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
     new_top1, top1 = 0.0, 0.0
     for epoch in range(args.max_epochs):
-        train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
+        train_cnn(model_ft, optimizer, ce_loss, mse_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test_cnn(model_ft, ce_loss, train_iterator, epoch, "Train", log_file, args.gpus)
-            new_top1 = test_cnn(model_ft, ce_loss, test_iterator, epoch, "Test", log_file, args.gpus)
+                test_cnn(model_ft, ce_loss, mse_loss, train_iterator, epoch, "Train", log_file, args.gpus)
+            new_top1 = test_cnn(model_ft, ce_loss, mse_loss, test_iterator, epoch, "Test", log_file, args.gpus)
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)

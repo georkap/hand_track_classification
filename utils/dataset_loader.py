@@ -13,6 +13,7 @@ import pickle
 import cv2
 import numpy as np
 import torch.utils.data
+from utils.video_sampler import RandomSampling, SequentialSampling
 
 def get_class_weights(list_file, num_classes, use_mapping):
     samples_list = parse_samples_list(list_file)
@@ -48,6 +49,29 @@ def load_pickle(tracks_path):
     with open(tracks_path,'rb') as f:
         tracks = pickle.load(f)
     return tracks
+
+def prepare_sampler(sampler_type, clip_length, frame_interval):
+    if sampler_type == "train":
+        train_sampler = RandomSampling(num=clip_length,
+                                       interval=frame_interval,
+                                       speed=[1.0, 1.0])
+        out_sampler = train_sampler
+    else:
+        val_sampler = SequentialSampling(num=clip_length,
+                                         interval=frame_interval,
+                                         fix_cursor=True,
+                                         shuffle=True)
+        out_sampler = val_sampler
+    return out_sampler
+
+def load_images(data_path, frame_indices, image_tmpl):
+    images = []
+    for f_ind in frame_indices:
+        im_name = os.path.join(data_path, image_tmpl.format(f_ind))
+        next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
+        next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
+        images.append(next_image)
+    return images
 
 class DataLine(object):
     def __init__(self, row):
@@ -111,7 +135,7 @@ class ImageDatasetLoader(torch.utils.data.Dataset):
 
 class VideoDatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, sampler, list_file, num_classes = 120, 
+    def __init__(self, sampler, list_file, num_classes=120, 
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
@@ -133,7 +157,7 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
                                              start_frame=start_frame)
 
-        sampled_frames = self.load_images(index, sampled_idxs)
+        sampled_frames = load_images(self.video_list[index].data_path, sampled_idxs, self.image_tmpl)
 
         clip_input = np.concatenate(sampled_frames, axis=2)
 
@@ -149,16 +173,6 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
             return clip_input, class_id
         else:
             return clip_input, class_id, self.video_list[index].data_path.split("\\")[-1]
-
-    def load_images(self, video_index, frame_indices):
-        images = []
-        for f_ind in frame_indices:
-            im_name = os.path.join(self.video_list[video_index].data_path,
-                                   self.image_tmpl.format(f_ind))
-            next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
-            next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
-            images.append(next_image)
-        return images
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
@@ -220,6 +234,65 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
+
+class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, sampler, video_list_file, point_list_file=None, num_classes=120, 
+                 img_tmpl='img_{:05d}.jpg', norm_val=[1.,1.,1.,1.], batch_transform=None, validation=False):
+        self.sampler = sampler
+        self.video_list = parse_samples_list(video_list_file)
+        if not point_list_file: # quick hack, not to abuse
+            if "train" in video_list_file:
+                point_list_file = r"splits\hand_tracks_select24\hand_locs_train_1.txt"
+            elif "val" in video_list_file:
+                point_list_file = r"splits\hand_tracks_select24\hand_locs_val_1.txt"
+        self.samples_list = parse_samples_list(point_list_file)
+        if num_classes != 120:
+            self.mapping = make_class_mapping(self.video_list)
+        else:
+            self.mapping = None
+        self.image_tmpl = img_tmpl
+        self.transform = batch_transform
+        self.validation = validation
+        self.norm_val = np.array(norm_val)
+        
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, index):
+        frame_count=self.video_list[index].num_frames
+        start_frame = self.video_list[index].start_frame
+        start_frame = start_frame if start_frame != -1 else 0
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
+                                             start_frame=start_frame)
+
+        sampled_frames = load_images(self.video_list[index].data_path, sampled_idxs, self.image_tmpl)
+
+        clip_input = np.concatenate(sampled_frames, axis=2)
+
+        if self.transform is not None:
+            clip_input = self.transform(clip_input)
+        
+        assert(self.video_list[index].num_frames == self.samples_list[index].num_frames)
+        
+        hand_tracks = load_pickle(self.samples_list[index].data_path)
+        left_track = np.array(hand_tracks['left'], dtype=np.float32)
+        left_track /= self.norm_val[:2] # normalize to [-0.5, 1]
+        left_track = left_track[sampled_idxs] # keep the points for the sampled frames
+        left_track = left_track[::2] # keep 1 coordinate pair for every two frames
+        right_track = np.array(hand_tracks['right'], dtype=np.float32)
+        right_track /= self.norm_val[2:]
+        right_track = right_track[sampled_idxs]
+        right_track = right_track[::2]
+        
+        if self.mapping:
+            class_id = self.mapping[self.video_list[index].label_verb]
+        else:
+            class_id = self.video_list[index].label_verb
+
+        if not self.validation:
+            return clip_input, (class_id, left_track, right_track)
+        else:
+            return clip_input, (class_id, left_track, right_track), self.video_list[index].data_path.split("\\")[-1]
 
 class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
