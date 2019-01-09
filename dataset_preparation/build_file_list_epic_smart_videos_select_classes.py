@@ -30,7 +30,8 @@ for i in range(28):
 split_dicts = [split_1, split_2, split_3, split_4]
 
 BASE_DIR = r"frames_rgb_flow\rgb\train"
-SPLITS_DIR = r"..\splits\epic_rgb_select24"
+SPLITS_DIR = r"..\splits\epic_rgb"
+#SPLITS_DIR = r"..\splits\epic_rgb_select24"
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
 train_names = [os.path.join(SPLITS_DIR, "epic_rgb_train_{}.txt".format(i)) for i in range(1,5)]
@@ -49,8 +50,8 @@ for index, row in annotations.iterrows():
     stop_frame = row.stop_frame
     num_frames = stop_frame - start_frame
     verb_class = row.verb_class
-    if verb_class not in selected_classes:
-        continue
+#    if verb_class not in selected_classes:
+#        continue
     noun_class = row.noun_class
     pid = row.participant_id
     uid = row.uid
