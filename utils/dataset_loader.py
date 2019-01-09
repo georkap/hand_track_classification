@@ -240,12 +240,7 @@ class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
                  img_tmpl='img_{:05d}.jpg', norm_val=[1.,1.,1.,1.], batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(video_list_file)
-        if not point_list_file: # quick hack, not to abuse
-            if "train" in video_list_file:
-                point_list_file = r"splits\hand_tracks_select24\hand_locs_train_1.txt"
-            elif "val" in video_list_file:
-                point_list_file = r"splits\hand_tracks_select24\hand_locs_val_1.txt"
-        self.samples_list = parse_samples_list(point_list_file)
+        self.samples_path = r"hand_detection_tracks"
         if num_classes != 120:
             self.mapping = make_class_mapping(self.video_list)
         else:
@@ -260,6 +255,8 @@ class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         frame_count=self.video_list[index].num_frames
+        label_verb = self.video_list[index].label_verb
+        label_noun = self.video_list[index].label_noun
         start_frame = self.video_list[index].start_frame
         start_frame = start_frame if start_frame != -1 else 0
         sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
@@ -272,10 +269,13 @@ class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
         if self.transform is not None:
             clip_input = self.transform(clip_input)
         
-        assert(self.video_list[index].num_frames == self.samples_list[index].num_frames)
+        a, b, c, pid, vid_id = self.video_list[index].data_path.split("\\")
+        track_path = os.path.join("hand_detection_tracks", pid, vid_id, "{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
         
-        hand_tracks = load_pickle(self.samples_list[index].data_path)
+        hand_tracks = load_pickle(track_path)
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
+        assert(self.video_list[index].num_frames == len(left_track))
+        
         left_track /= self.norm_val[:2] # normalize to [-0.5, 1]
         left_track = left_track[sampled_idxs] # keep the points for the sampled frames
         left_track = left_track[::2] # keep 1 coordinate pair for every two frames
@@ -285,9 +285,9 @@ class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
         right_track = right_track[::2]
         
         if self.mapping:
-            class_id = self.mapping[self.video_list[index].label_verb]
+            class_id = self.mapping[label_verb]
         else:
-            class_id = self.video_list[index].label_verb
+            class_id = label_verb
 
         if not self.validation:
             return clip_input, (class_id, left_track, right_track)

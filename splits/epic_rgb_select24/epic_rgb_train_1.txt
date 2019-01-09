@@ -123,7 +123,6 @@ frames_rgb_flow\rgb\train\P01\P01_01 96 1 29 122 32844
 frames_rgb_flow\rgb\train\P01\P01_01 45 3 10 123 32956
 frames_rgb_flow\rgb\train\P01\P01_01 65 0 22 124 33204
 frames_rgb_flow\rgb\train\P01\P01_01 231 6 90 125 33279
-frames_rgb_flow\rgb\train\P01\P01_01 72 0 131 126 33667
 frames_rgb_flow\rgb\train\P01\P01_01 84 0 131 127 33667
 frames_rgb_flow\rgb\train\P01\P01_01 44 0 40 128 33724
 frames_rgb_flow\rgb\train\P01\P01_01 275 5 40 129 33855
@@ -912,7 +911,6 @@ frames_rgb_flow\rgb\train\P01\P01_07 200 1 1 957 4653
 frames_rgb_flow\rgb\train\P01\P01_07 159 3 8 958 4860
 frames_rgb_flow\rgb\train\P01\P01_07 52 0 42 959 5059
 frames_rgb_flow\rgb\train\P01\P01_07 203 1 42 960 5133
-frames_rgb_flow\rgb\train\P01\P01_07 76 3 8 961 5346
 frames_rgb_flow\rgb\train\P01\P01_07 69 3 8 962 5346
 frames_rgb_flow\rgb\train\P01\P01_07 51 0 16 963 5461
 frames_rgb_flow\rgb\train\P01\P01_07 80 2 8 964 5545
@@ -3898,7 +3896,6 @@ frames_rgb_flow\rgb\train\P02\P02_07 62 1 63 5094 988
 frames_rgb_flow\rgb\train\P02\P02_07 90 13 168 5096 1152
 frames_rgb_flow\rgb\train\P02\P02_07 60 13 251 5097 1248
 frames_rgb_flow\rgb\train\P02\P02_07 240 13 251 5098 1376
-frames_rgb_flow\rgb\train\P02\P02_07 117 13 251 5099 1632
 frames_rgb_flow\rgb\train\P02\P02_07 171 13 251 5100 1632
 frames_rgb_flow\rgb\train\P02\P02_07 157 13 27 5101 1779
 frames_rgb_flow\rgb\train\P02\P02_07 41 1 168 5102 1954
@@ -13722,7 +13719,6 @@ frames_rgb_flow\rgb\train\P20\P20_01 300 1 46 21736 58588
 frames_rgb_flow\rgb\train\P20\P20_01 299 1 46 21737 58597
 frames_rgb_flow\rgb\train\P20\P20_01 76 1 46 21738 58887
 frames_rgb_flow\rgb\train\P20\P20_01 46 0 22 21739 58969
-frames_rgb_flow\rgb\train\P20\P20_01 286 13 26 21740 58994
 frames_rgb_flow\rgb\train\P20\P20_01 165 13 26 21741 58994
 frames_rgb_flow\rgb\train\P20\P20_01 352 23 22 21742 59349
 frames_rgb_flow\rgb\train\P20\P20_01 203 23 22 21743 59624
@@ -16065,7 +16061,6 @@ frames_rgb_flow\rgb\train\P22\P22_08 54 2 3 25706 16701
 frames_rgb_flow\rgb\train\P22\P22_08 116 4 12 25707 16760
 frames_rgb_flow\rgb\train\P22\P22_08 298 4 318 25708 16902
 frames_rgb_flow\rgb\train\P22\P22_08 64 1 7 25709 17210
-frames_rgb_flow\rgb\train\P22\P22_08 573 4 42 25710 17280
 frames_rgb_flow\rgb\train\P22\P22_08 573 4 42 25711 17280
 frames_rgb_flow\rgb\train\P22\P22_08 75 1 42 25712 17836
 frames_rgb_flow\rgb\train\P22\P22_08 195 4 11 25713 17907
@@ -17134,7 +17129,6 @@ frames_rgb_flow\rgb\train\P22\P22_12 90 1 32 26807 3659
 frames_rgb_flow\rgb\train\P22\P22_12 66 2 9 26808 3751
 frames_rgb_flow\rgb\train\P22\P22_12 52 0 86 26809 3822
 frames_rgb_flow\rgb\train\P22\P22_12 301 16 67 26810 4024
-frames_rgb_flow\rgb\train\P22\P22_12 360 16 67 26811 4025
 frames_rgb_flow\rgb\train\P22\P22_12 360 16 67 26812 4025
 frames_rgb_flow\rgb\train\P22\P22_12 2100 16 67 26813 4496
 frames_rgb_flow\rgb\train\P22\P22_12 83 1 67 26814 6681
@@ -18861,7 +18855,6 @@ frames_rgb_flow\rgb\train\P22\P22_17 46 0 4 28581 26038
 frames_rgb_flow\rgb\train\P22\P22_17 65 1 4 28582 26090
 frames_rgb_flow\rgb\train\P22\P22_17 95 0 18 28583 26149
 frames_rgb_flow\rgb\train\P22\P22_17 117 4 18 28584 26205
-frames_rgb_flow\rgb\train\P22\P22_17 60 1 18 28585 26283
 frames_rgb_flow\rgb\train\P22\P22_17 66 1 18 28586 26283
 frames_rgb_flow\rgb\train\P22\P22_17 68 0 18 28587 26341
 frames_rgb_flow\rgb\train\P22\P22_17 95 4 18 28588 26408

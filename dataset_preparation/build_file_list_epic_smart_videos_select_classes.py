@@ -17,6 +17,7 @@ get_track_class = lambda x: int(x.split('_')[1])
 #selected_classes = [5,6]
 selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
 
+bad_uids = [126, 961, 5099, 12599, 21740, 25710, 26811, 28585, 33647, 37431]
 unavailable = [9, 11, 18]
 available_pids = ["P{:02d}".format(i) for i in range(1,32) if i not in unavailable]
 
@@ -53,6 +54,8 @@ for index, row in annotations.iterrows():
     noun_class = row.noun_class
     pid = row.participant_id
     uid = row.uid
+    if uid in bad_uids:
+        continue
     videoid = row.video_id
     action_dir = os.path.join(BASE_DIR, pid, videoid)
     line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb_class, noun_class, uid, start_frame)
