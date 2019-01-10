@@ -64,15 +64,6 @@ def prepare_sampler(sampler_type, clip_length, frame_interval):
         out_sampler = val_sampler
     return out_sampler
 
-def load_images(data_path, frame_indices, image_tmpl):
-    images = []
-    for f_ind in frame_indices:
-        im_name = os.path.join(data_path, image_tmpl.format(f_ind))
-        next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
-        next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
-        images.append(next_image)
-    return images
-
 class DataLine(object):
     def __init__(self, row):
         self.data = row
@@ -157,7 +148,7 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
                                              start_frame=start_frame)
 
-        sampled_frames = load_images(self.video_list[index].data_path, sampled_idxs, self.image_tmpl)
+        sampled_frames = self.load_images(index, sampled_idxs)
 
         clip_input = np.concatenate(sampled_frames, axis=2)
 
@@ -173,6 +164,16 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
             return clip_input, class_id
         else:
             return clip_input, class_id, self.video_list[index].data_path.split("\\")[-1]
+
+    def load_images(self, video_index, frame_indices):
+        images = []
+        for f_ind in frame_indices:
+            im_name = os.path.join(self.video_list[video_index].data_path, 
+                                   self.image_tmpl.format(f_ind))
+            next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
+            next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
+            images.append(next_image)
+        return images
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
