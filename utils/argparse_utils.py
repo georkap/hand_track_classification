@@ -160,7 +160,7 @@ def parse_args(net_type, val=False):
     
 def make_model_name(args, net_type):
     if net_type == 'resnet':
-        model_name = "res{}_{}_{}_{}".format(args.resnet_version, args.channels,
+        model_name = "res{}_{}_{}_{}_{}".format(args.resnet_version, args.channels,
                          args.batch_size, args.dropout, args.max_epochs)
         if args.pretrained:
             model_name = model_name + "_pt"
