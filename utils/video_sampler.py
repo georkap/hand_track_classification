@@ -28,7 +28,10 @@ class RandomSampling(object):
         frame_range = (self.num-1) * random_interval
         clip_start = self.rng.uniform(0, (range_max-1) - frame_range) + start_frame
         clip_end = clip_start + frame_range
-        return np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
+        idxs = np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
+        for idx in idxs:
+            assert idx >=start_frame and idx <= start_frame+range_max
+        return idxs
 
 
 class SequentialSampling(object):
@@ -57,12 +60,14 @@ class SequentialSampling(object):
         # pickup a clip
         cursor, clips = self.memory[v_id]
         if not clips:
-            return [self.rng.choice(range(0, range_max))] * num
+            return [self.rng.choice(range(start_frame, start_frame+range_max))] * num
         cursor = (cursor + 1) % len(clips)
         if prev_failed or not self.fix_cursor:
             self.memory[v_id][0] = cursor
         # sampling within clip
-        idxs = range(clips[cursor], clips[cursor]+frame_range, interval)
+        idxs = list(range(clips[cursor], clips[cursor]+frame_range, interval))
+        for idx in idxs:
+            assert idx >=start_frame and idx <= start_frame+range_max
         return idxs
 
 
@@ -70,30 +75,36 @@ if __name__ == "__main__":
 
     import logging
     logging.getLogger().setLevel(logging.DEBUG)
-
+    
     """ test RandomSampling() """
-
-    random_sampler = RandomSampling(num=8, interval=2, speed=[0.5, 2])
-
-    logging.info("RandomSampling(): range_max < num")
     for i in range(10):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=2, v_id=1, start_frame=100)))
+        ran_samp = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=None)
+        logging.info("{:d}: {}".format(i, ran_samp.sampling(range_max=206, v_id=1, start_frame=2592)))
 
-    logging.info("RandomSampling(): range_max == num")
-    for i in range(10):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=8, v_id=1, start_frame=100)))
-
-    logging.info("RandomSampling(): range_max > num")
-    for i in range(90):
-        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=30, v_id=1, start_frame=100)))
-
-
+#    random_sampler = RandomSampling(num=8, interval=2, speed=[0.5, 2])
+#
+#    logging.info("RandomSampling(): range_max < num")
+#    for i in range(10):
+#        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=2, v_id=1, start_frame=100)))
+#
+#    logging.info("RandomSampling(): range_max == num")
+#    for i in range(10):
+#        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=8, v_id=1, start_frame=100)))
+#
+#    logging.info("RandomSampling(): range_max > num")
+#    for i in range(90):
+#        logging.info("{:d}: {}".format(i, random_sampler.sampling(range_max=30, v_id=1, start_frame=100)))
+#
+#
     """ test SequentialSampling() """
-    sequential_sampler = SequentialSampling(num=3, interval=3, fix_cursor=False)
-
-    logging.info("SequentialSampling():")
     for i in range(10):
-        logging.info("{:d}: v_id = {}: {}".format(i, 0, list(sequential_sampler.sampling(range_max=14, v_id=0, start_frame=100))))
-        # logging.info("{:d}: v_id = {}: {}".format(i, 1, sequential_sampler.sampling(range_max=9, v_id=1)))
-        # logging.info("{:d}: v_id = {}: {}".format(i, 2, sequential_sampler.sampling(range_max=2, v_id=2)))
-        # logging.info("{:d}: v_id = {}: {}".format(i, 3, sequential_sampler.sampling(range_max=3, v_id=3)))
+        seq_samp = SequentialSampling(num=16, interval=2, fix_cursor=True, shuffle=True, seed=0)
+        logging.info("{:d}: v_id = {}: {}".format(i, i, seq_samp.sampling(range_max=312, v_id=1, start_frame=20668)))
+#    sequential_sampler = SequentialSampling(num=3, interval=3, fix_cursor=False)
+#
+#    logging.info("SequentialSampling():")
+#    for i in range(10):
+#        logging.info("{:d}: v_id = {}: {}".format(i, 0, list(sequential_sampler.sampling(range_max=14, v_id=0, start_frame=100))))
+#        # logging.info("{:d}: v_id = {}: {}".format(i, 1, sequential_sampler.sampling(range_max=9, v_id=1)))
+#        # logging.info("{:d}: v_id = {}: {}".format(i, 2, sequential_sampler.sampling(range_max=2, v_id=2)))
+#        # logging.info("{:d}: v_id = {}: {}".format(i, 3, sequential_sampler.sampling(range_max=3, v_id=3)))

@@ -54,13 +54,13 @@ def prepare_sampler(sampler_type, clip_length, frame_interval):
     if sampler_type == "train":
         train_sampler = RandomSampling(num=clip_length,
                                        interval=frame_interval,
-                                       speed=[1.0, 1.0])
+                                       speed=[0.5, 1.5], seed=None)
         out_sampler = train_sampler
     else:
         val_sampler = SequentialSampling(num=clip_length,
                                          interval=frame_interval,
                                          fix_cursor=True,
-                                         shuffle=True)
+                                         shuffle=True, seed=None)
         out_sampler = val_sampler
     return out_sampler
 
@@ -70,22 +70,6 @@ def load_images(data_path, frame_indices, image_tmpl):
         im_name = os.path.join(data_path, image_tmpl.format(f_ind))
         next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
         next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
-        images.append(next_image)
-    return images
-
-def debug_load_images(data_path, frame_indices, image_tmpl):
-    images = []
-    for f_ind in frame_indices:
-        im_name = os.path.join(data_path, image_tmpl.format(f_ind))
-        next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
-        try:
-            next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
-        except:
-            pass
-        finally:
-            import sys
-            sys.exit("Problematic image name {} and frame indices {}".format(im_name, frame_indices))
-                
         images.append(next_image)
     return images
 
