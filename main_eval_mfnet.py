@@ -72,39 +72,44 @@ def main():
     model_ft.load_state_dict(checkpoint['state_dict'])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
     
-    val_sampler = RandomSampling(num=args.clip_length,
-                                 interval=args.frame_interval,
-                                 speed=[1.0, 1.0])
-    val_transforms = transforms.Compose([Resize((256,256), False), RandomCrop((224,224)),
-                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
-                                    num_classes=args.verb_classes, 
-                                    batch_transform=val_transforms,
-                                    img_tmpl='frame_{:010d}.jpg',
-                                    validation=True)
-    val_iter = torch.utils.data.DataLoader(val_loader,
-                                           batch_size=args.batch_size,
-                                           shuffle=False,
-                                           num_workers=args.num_workers,
-                                           pin_memory=True)
-
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
     validate = validate_resnet
-    top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
+    
+    overall_top1 = 0
+    for i in range(args.mfnet_eval):
+        val_sampler = RandomSampling(num=args.clip_length,
+                                     interval=args.frame_interval,
+                                     speed=[1.0, 1.0], seed=i)
+        val_transforms = transforms.Compose([Resize((256,256), False), RandomCrop((224,224)),
+                                             ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+        val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
+                                        num_classes=args.verb_classes, 
+                                        batch_transform=val_transforms,
+                                        img_tmpl='frame_{:010d}.jpg',
+                                        validation=True)
+        val_iter = torch.utils.data.DataLoader(val_loader,
+                                               batch_size=args.batch_size,
+                                               shuffle=False,
+                                               num_workers=args.num_workers,
+                                               pin_memory=True)
 
-    #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
-    #video_labels = [x[1].cpu().numpy() for x in outputs]
-    video_preds = [x[0] for x in outputs]
-    video_labels = [x[1] for x in outputs]
+        top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
-    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
+        video_preds = [x[0] for x in outputs]
+        video_labels = [x[1] for x in outputs]
 
-    print_and_save(cf, log_file)
-    print_and_save("Cls Rec {}".format(recall), log_file)
-    print_and_save("Cls Pre {}".format(precision), log_file)
-    print_and_save("Cls Acc {}".format(cls_acc), log_file)
-    print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
-    print_and_save("Dataset Acc {}".format(top1_acc), log_file)
+        cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
 
+        overall_top1 += top1_acc
+        print_and_save(cf, log_file)
+        print_and_save("Cls Rec {}".format(recall), log_file)
+        print_and_save("Cls Pre {}".format(precision), log_file)
+        print_and_save("Cls Acc {}".format(cls_acc), log_file)
+        print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
+        print_and_save("Dataset Acc {}".format(top1_acc), log_file)
+        
+    print_and_save("", log_file)  
+    print_and_save("Dataset Acc {} times {}".format(args.mfnet_eval, overall_top1/args.mfnet_eval), log_file)
+    
 if __name__ == '__main__':
     main()
