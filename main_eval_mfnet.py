@@ -64,9 +64,9 @@ def validate_resnet_do(model, criterion, test_iterator, cur_epoch, dataset, log_
             losses_b.update(loss_b.item(), output_b.size(0))
             losses.update(loss.item(), output_a.size(0))
             
-            to_print = "[Batch {}/{}]" + \
-            "[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}]," + \
-            "Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]\n\t".format(
+            to_print = '[Batch {}/{}]' \
+            '[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+            'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]\n\t'.format(
             batch_idx, len(test_iterator),
             top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
             top1_b.val, top1_b.avg, top5_b.val, top5_b.avg,

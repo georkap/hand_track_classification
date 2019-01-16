@@ -63,11 +63,11 @@ def train_cnn_do(model, optimizer, criterion, train_iterator, mixup_alpha, cur_e
         losses.update(loss.item(), output_a.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
-        to_print = "[Epoch:{}, Batch {}/{} in {:.3f} s]" + \
-                   "[Losses {:.4f}[avg:{:.4f}], loss_a {:.4f}[avg:{:.4f}], loss_b {:.4f}[avg:{:.4f}]," + \
-                   "Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}]," + \
-                   "Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]," + \
-                   "LR {:.6f}".format(
+        to_print = '[Epoch:{}, Batch {}/{} in {:.3f} s]'\
+                   '[Losses {:.4f}[avg:{:.4f}], loss_a {:.4f}[avg:{:.4f}], loss_b {:.4f}[avg:{:.4f}],' \
+                   'Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+                   'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]],' \
+                   'LR {:.6f}'.format(
                            cur_epoch, batch_idx, len(train_iterator), batch_time.val,
                            losses_a.val, losses_a.avg, losses_b.val, losses_b.avg, losses.val, losses.avg,
                            top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
@@ -100,9 +100,9 @@ def test_cnn_do(model, criterion, test_iterator, cur_epoch, dataset, log_file, g
             losses_b.update(loss_b.item(), output_b.size(0))
             losses.update(loss.item(), output_a.size(0))
             
-            to_print = "[Epoch:{}, Batch {}/{}]" + \
-                       "[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}]," + \
-                       "Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]".format(
+            to_print = '[Epoch:{}, Batch {}/{}]' \
+                       '[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+                       'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]'.format(
                        cur_epoch, batch_idx, len(test_iterator),
                        top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
                        top1_b.val, top1_b.avg, top5_b.val, top5_b.avg)
