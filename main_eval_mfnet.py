@@ -115,8 +115,17 @@ def main():
     print_and_save(args, log_file)
     cudnn.benchmark = True
     
-    mfnet_3d = MFNET_3D if not args.double_output else MFNET_3D_DO
-    num_classes = args.verb_classes if not args.double_output else (args.verb_classes, args.noun_classes)
+    if not args.double_output:
+        mfnet_3d = MFNET_3D
+        num_classes = args.verb_classes 
+        validate = validate_resnet
+        overall_top1, overall_mean_cls_acc = 0.0, 0.0
+    else:
+        mfnet_3d = MFNET_3D_DO
+        num_classes = (args.verb_classes, args.noun_classes)
+        validate = validate_resnet_do
+        overall_top1, overall_mean_cls_acc = (0.0, 0.0), (0.0, 0.0)
+        
     model_ft = mfnet_3d(num_classes)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1':'cuda:0'})
@@ -124,9 +133,7 @@ def main():
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
     
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
-    validate = validate_resnet if not args.double_output else validate_resnet_do
     
-    overall_top1, overall_mean_cls_acc = 0.0, 0.0 if not args.double_output else (0.0, 0.0), (0.0, 0.0)
     for i in range(args.mfnet_eval):
         val_sampler = RandomSampling(num=args.clip_length,
                                      interval=args.frame_interval,

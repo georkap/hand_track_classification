@@ -256,7 +256,10 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda(device=args.gpus[0])
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
-    new_top1, top1 = 0.0, 0.0 if not args.double_output else (0.0, 0.0), (0.0, 0.0)
+    if not args.double_output:
+        new_top1, top1 = 0.0, 0.0 if not args.double_output else (0.0, 0.0), (0.0, 0.0)
+    else:
+        new_top1, top1 = (0.0, 0.0), (0.0, 0.0)
     for epoch in range(args.max_epochs):
         train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
