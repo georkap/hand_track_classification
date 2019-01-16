@@ -143,6 +143,8 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
             verb_classes = num_classes[0]
 #            noun_classes = verb_classes[1]
             self.double_output = True
+        else:
+            verb_classes = num_classes
         if verb_classes != 120:
             self.mapping = make_class_mapping(self.video_list)
         else:
