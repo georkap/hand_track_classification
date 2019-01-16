@@ -139,7 +139,7 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
-        if len(num_classes) == 2: # this is a do case
+        if isinstance(num_classes, tuple): # this is a double output case
             verb_classes = num_classes[0]
 #            noun_classes = verb_classes[1]
             self.double_output = True

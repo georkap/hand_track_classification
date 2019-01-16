@@ -138,13 +138,13 @@ def save_checkpoints(model_ft, optimizer, top1, new_top1,
     else:
         weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
     print_and_save('Saving weights to {}'.format(weight_file), log_file)
-    if len(top1) == 1:
+    if not isinstance(top1, tuple):
         torch.save({'epoch': epoch,
                     'state_dict': model_ft.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'top1': new_top1}, weight_file)
         top1 = save_best_checkpoint(top1, new_top1, output_dir, model_name, weight_file)
-    elif len(top1) == 2:
+    else:
         torch.save({'epoch':epoch,
                     'state_dict': model_ft.state_dict(),
                     'optimizer': optimizer.state_dict(),

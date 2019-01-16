@@ -190,7 +190,7 @@ def main():
     print_and_save(args, log_file)
     print_and_save("Model name: {}".format(model_name), log_file)    
     cudnn.benchmark = True
-
+    
     mfnet_3d = MFNET_3D if not args.double_output else MFNET_3D_DO
     num_classes = args.verb_classes if not args.double_output else (args.verb_classes, args.noun_classes)
     model_ft = mfnet_3d(num_classes, dropout=args.dropout)
@@ -257,15 +257,17 @@ def main():
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
     if not args.double_output:
-        new_top1, top1 = 0.0, 0.0 if not args.double_output else (0.0, 0.0), (0.0, 0.0)
+        new_top1, top1 = 0.0, 0.0
     else:
         new_top1, top1 = (0.0, 0.0), (0.0, 0.0)
+    train = train_cnn if not args.double_output else train_cnn_do
+    test = test_cnn if not args.double_output else test_cnn_do
     for epoch in range(args.max_epochs):
-        train_cnn(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
+        train(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test_cnn(model_ft, ce_loss, train_iterator, epoch, "Train", log_file, args.gpus)
-            new_top1 = test_cnn(model_ft, ce_loss, test_iterator, epoch, "Test", log_file, args.gpus)
+                test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file, args.gpus)
+            new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file, args.gpus)
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)

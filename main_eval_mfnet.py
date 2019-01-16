@@ -153,13 +153,13 @@ def main():
 
         top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
-        if len(top1) == 1:
+        if not isinstance(top1, tuple):
             video_preds = [x[0] for x in outputs]
             video_labels = [x[1] for x in outputs]
             mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", log_file)
             overall_mean_cls_acc += mean_cls_acc
             overall_top1 += top1_acc
-        elif len(top1) == 2:
+        else:
             video_preds_a, video_preds_b = [x[0] for x in outputs[0]], [x[0] for x in outputs[1]]
             video_labels_a, video_labels_b = [x[1] for x in outputs[0]], [x[1] for x in outputs[1]]
             mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", log_file)
@@ -168,10 +168,10 @@ def main():
             overall_top1 = (overall_top1[0] + top1_acc_a, overall_top1[1] + top1_acc_b)
         
     print_and_save("", log_file)
-    if len(top1) == 1:
+    if not isinstance(top1, tuple):
         print_and_save("Mean Cls Acc {}".format(overall_mean_cls_acc/args.mfnet_eval), log_file)
         print_and_save("Dataset Acc ({} times) {}".format(args.mfnet_eval, overall_top1/args.mfnet_eval), log_file)
-    elif len(top1) == 2:
+    else:
         print_and_save("Mean Cls Acc a {}, b {}".format(overall_mean_cls_acc[0]/args.mfnet_eval, overall_mean_cls_acc[1]/args.mfnet_eval), log_file)
         print_and_save("Dataset Acc ({} times) a {}, b {}".format(args.mfnet_eval, overall_top1[0]/args.mfnet_eval, overall_top1[1]/args.mfnet_eval), log_file)
 
