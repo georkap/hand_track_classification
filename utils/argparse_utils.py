@@ -62,6 +62,7 @@ def make_base_parser(val):
 def parse_args_dataset(parser, net_type):
     # Dataset parameters
     parser.add_argument('--verb_classes', type=int, default=120)
+    parser.add_argument('--noun_classes', type=int, default=322)
     parser.add_argument('--batch_size', type=int, default=1)
     if net_type in ['resnet', 'mfnet']:
         parser.add_argument('--clip_gradient', action='store_true')
@@ -99,6 +100,7 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--feature_extraction', default=False, action='store_true')
     elif net_type == 'mfnet':
         parser.add_argument('--pretrained_model_path', type=str, default=r"models\MFNet3D_Kinetics-400_72.8.pth")
+        parser.add_argument('--double_output', default=False, action='store_true')
     elif net_type == 'lstm':
         parser.add_argument('--lstm_input', type=int, default=4)
         parser.add_argument('--lstm_hidden', type=int, default=8)
@@ -207,6 +209,8 @@ def make_model_name(args, net_type):
     if args.lr_type == "clr":
         clr_type = "tri" if args.lr_steps[4] == "triangular" else "tri2" if args.lr_steps[4] == "triangular2" else "exp"
         model_name = model_name + "_{}".format(clr_type)
+    if args.double_output:
+        model_name = model_name + "_do"
     if args.verb_classes != 120:
         model_name = model_name + "_sel{}".format(args.verb_classes)
     if args.mixup_a != 1.:

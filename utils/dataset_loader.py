@@ -135,11 +135,15 @@ class ImageDatasetLoader(torch.utils.data.Dataset):
 
 class VideoDatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, sampler, list_file, num_classes=120, 
+    def __init__(self, sampler, list_file, verb_classes=120, 
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
-        if num_classes != 120:
+        if len(verb_classes) == 2: # this is a do case
+            verb_classes = verb_classes[0]
+#            noun_classes = verb_classes[1]
+            self.double_output = True
+        if verb_classes != 120:
             self.mapping = make_class_mapping(self.video_list)
         else:
             self.mapping = None
@@ -165,14 +169,19 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
             clip_input = self.transform(clip_input)
             
         if self.mapping:
-            class_id = self.mapping[self.video_list[index].label_verb]
+            verb_id = self.mapping[self.video_list[index].label_verb]
         else:
-            class_id = self.video_list[index].label_verb
+            verb_id = self.video_list[index].label_verb
+        if self.double_output:            
+            noun_id = self.video_list[index].label_noun
+            classes = (verb_id, noun_id)
+        else:
+            classes = verb_id
 
         if not self.validation:
-            return clip_input, class_id
+            return clip_input, classes
         else:
-            return clip_input, class_id, self.video_list[index].data_path.split("\\")[-1]
+            return clip_input, classes, self.video_list[index].data_path.split("\\")[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
@@ -238,6 +247,7 @@ class PointDatasetLoader(torch.utils.data.Dataset):
 class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, sampler, video_list_file, point_list_file=None, num_classes=120, 
                  img_tmpl='img_{:05d}.jpg', norm_val=[1.,1.,1.,1.], batch_transform=None, validation=False):
+        #TODO: make dataloader for verbs and nouns
         self.sampler = sampler
         self.video_list = parse_samples_list(video_list_file)
         self.samples_path = r"hand_detection_tracks"

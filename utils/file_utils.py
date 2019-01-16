@@ -122,6 +122,15 @@ def make_plot_dataframe(np_columns, str_columns, title, file):
     
     return df
 
+def save_best_checkpoint(top1, new_top1, output_dir, model_name, weight_file):
+    isbest = True if new_top1 >= top1 else False
+    if isbest:
+        best = os.path.join(output_dir, model_name+'_best.pth')
+        shutil.copyfile(weight_file, best)
+        top1 = new_top1
+    return top1
+
+
 def save_checkpoints(model_ft, optimizer, top1, new_top1,
                      save_all_weights, output_dir, model_name, epoch, log_file):
     if save_all_weights:
@@ -129,15 +138,23 @@ def save_checkpoints(model_ft, optimizer, top1, new_top1,
     else:
         weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
     print_and_save('Saving weights to {}'.format(weight_file), log_file)
-    torch.save({'epoch': epoch,
-                'state_dict': model_ft.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'top1': new_top1}, weight_file)
-    isbest = True if new_top1 >= top1 else False
-    if isbest:
-        best = os.path.join(output_dir, model_name+'_best.pth')
-        shutil.copyfile(weight_file, best)
-        top1 = new_top1
+    if len(top1) == 1:
+        torch.save({'epoch': epoch,
+                    'state_dict': model_ft.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'top1': new_top1}, weight_file)
+        top1 = save_best_checkpoint(top1, new_top1, output_dir, model_name, weight_file)
+    elif len(top1) == 2:
+        torch.save({'epoch':epoch,
+                    'state_dict': model_ft.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'top1_a': new_top1[0],
+                    'top1_b': new_top1[1]}, weight_file)
+        top1_a = save_best_checkpoint(top1[0], new_top1[0], output_dir, 
+                                      model_name + "_verb", weight_file)
+        top1_b = save_best_checkpoint(top1[1], new_top1[1], output_dir, 
+                                      model_name + "_noun", weight_file)
+        top1 = (top1_a, top1_b)
     return top1
 
 def save_prev_checkpoint(pth_path):
