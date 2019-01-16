@@ -135,12 +135,12 @@ class ImageDatasetLoader(torch.utils.data.Dataset):
 
 class VideoDatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, sampler, list_file, verb_classes=120, 
+    def __init__(self, sampler, list_file, num_classes=120, 
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
-        if len(verb_classes) == 2: # this is a do case
-            verb_classes = verb_classes[0]
+        if len(num_classes) == 2: # this is a do case
+            verb_classes = num_classes[0]
 #            noun_classes = verb_classes[1]
             self.double_output = True
         if verb_classes != 120:
