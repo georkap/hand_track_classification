@@ -111,3 +111,6 @@ frames_rgb_flow
 batch_*
 lstm_tests.py
 main_lstm_weighted.py
+
+# PyCharm project specifics
+.idea

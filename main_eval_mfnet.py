@@ -54,8 +54,8 @@ def validate_resnet_do(model, criterion, test_iterator, cur_epoch, dataset, log_
                 outputs_b.append([res_b, label_b])
                 batch_preds.append("{}, a P-L:{}-{}, b P-L:{}-{}".format(video_names[j], res_a, label_a, res_b, label_b))
             
-            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach.cpu(), topk=(1,5))
-            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach.cpu(), topk=(1,5))
+            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
             top1_a.update(t1_a.item(), output_a.size(0))
             top5_a.update(t5_a.item(), output_a.size(0))
             top1_b.update(t1_b.item(), output_b.size(0))

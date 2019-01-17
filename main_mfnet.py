@@ -52,8 +52,8 @@ def train_cnn_do(model, optimizer, criterion, train_iterator, mixup_alpha, cur_e
         loss.backward()
         optimizer.step()
 
-        t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.cpu(), topk=(1,5))
-        t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.cpu(), topk=(1,5))
+        t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+        t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
         top1_a.update(t1_a.item(), output_a.size(0))
         top5_a.update(t5_a.item(), output_a.size(0))
         top1_b.update(t1_b.item(), output_b.size(0))
@@ -90,8 +90,8 @@ def test_cnn_do(model, criterion, test_iterator, cur_epoch, dataset, log_file, g
             loss_b = criterion(output_b, targets_b)
             loss = 0.75*loss_a + 0.25*loss_b
 
-            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach.cpu(), topk=(1,5))
-            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach.cpu(), topk=(1,5))
+            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
             top1_a.update(t1_a.item(), output_a.size(0))
             top5_a.update(t5_a.item(), output_a.size(0))
             top1_b.update(t1_b.item(), output_b.size(0))
