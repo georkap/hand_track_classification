@@ -66,7 +66,7 @@ def validate_resnet_do(model, criterion, test_iterator, cur_epoch, dataset, log_
             
             to_print = '[Batch {}/{}]' \
             '[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
-            'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]\n\t'.format(
+            'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]\n\t{}'.format(
             batch_idx, len(test_iterator),
             top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
             top1_b.val, top1_b.avg, top5_b.val, top5_b.avg,
@@ -112,6 +112,12 @@ def main():
     
     output_dir = os.path.dirname(args.ckpt_path)
     log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
+    if args.double_output and args.logging:
+        if 'verb' in args.ckpt_path:
+            log_file = os.path.join(output_dir, "results-accuracy-validation-verb.txt")
+        if 'noun' in args.ckpt_path:
+            log_file = os.path.join(output_dir, "results-accuracy-validation-noun.txt")
+            
     print_and_save(args, log_file)
     cudnn.benchmark = True
     
