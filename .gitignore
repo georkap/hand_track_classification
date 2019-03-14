@@ -115,3 +115,6 @@ main_lstm_weighted.py
 
 # PyCharm project specifics
 .idea
+
+# vscode project specific
+.vscode
