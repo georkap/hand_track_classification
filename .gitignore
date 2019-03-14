@@ -108,6 +108,7 @@ venv.bak/
 hand_detection_track_images
 hand_detection_tracks
 frames_rgb_flow
+hand_detection_tracks_fd_train
 batch_*
 lstm_tests.py
 main_lstm_weighted.py
