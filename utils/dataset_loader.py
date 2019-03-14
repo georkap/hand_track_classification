@@ -51,6 +51,15 @@ def load_pickle(tracks_path):
         tracks = pickle.load(f)
     return tracks
 
+def load_two_pickle(tracks_path, secondary_prefix):
+    obj_path = secondary_prefix
+    for p in tracks_path.split('\\')[1:]:
+        obj_path = os.path.join(obj_path, p)
+    with open(obj_path, 'rb') as f:
+        objects = pickle.load(f)
+    return load_pickle(tracks_path), objects
+
+
 def prepare_sampler(sampler_type, clip_length, frame_interval):
     if sampler_type == "train":
         train_sampler = RandomSampling(num=clip_length,
@@ -201,7 +210,17 @@ class PointPolarDatasetLoaderMultiSec(torch.utils.data.Dataset):
             hand_tracks = load_pickle(self.samples_list[index].data_path)
             left_track = np.array(hand_tracks['left'], dtype=np.float32)
             right_track = np.array(hand_tracks['right'], dtype=np.float32)
-            
+
+def object_list_to_bpv(detections, num_noun_classes, max_seq_length):
+    if max_seq_length != 0:
+        sampled_detections = np.array(detections)
+        sampled_detections = sampled_detections[np.linspace(0, len(detections), max_seq_length, endpoint=False, dtype=int)].tolist()
+    bpv = np.zeros((max_seq_length, num_noun_classes), dtype=np.float32)
+    for i, dets in enumerate(sampled_detections):
+        for obj in dets:
+            bpv[i, obj] = 1
+    return bpv
+          
 def load_left_right_tracks(hand_tracks, max_seq_length):
     left_track = np.array(hand_tracks['left'], dtype=np.float32)
     right_track = np.array(hand_tracks['right'], dtype=np.float32)
@@ -338,6 +357,39 @@ class PointPolarDatasetLoader(torch.utils.data.Dataset):
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
         
+class PointBpvDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length, norm_val=[1.,1.,1.,1.],
+                 validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        # no mapping supported for now. only use all classes
+        self.norm_val = np.array(norm_val)
+        self.validation = validation
+        self.max_seq_length = max_seq_length
+        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, 'noun_bpv_oh') for index in range(len(self.samples_list))]
+    
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self, index):
+        hand_tracks, object_detections = self.data_arr[index]
+        left_track, right_track = load_left_right_tracks(hand_tracks, self.max_seq_length)
+        
+        left_track /= self.norm_val[:2]
+        right_track /= self.norm_val[2:]
+        
+        bpv = object_list_to_bpv(object_detections, 352, self.max_seq_length)
+        
+        points = np.concatenate((left_track,
+                                 right_track,
+                                 bpv), -1).astype(np.float32)
+        seq_size = len(points)
+        
+        class_id = self.samples_list[index].label_verb
+        if not self.validation:
+            return points, seq_size, class_id
+        else:
+            name_parts = self.samples_list[index].data_path.split("\\")
+            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
