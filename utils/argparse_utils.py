@@ -43,10 +43,11 @@ def parse_args_dataset(parser, net_type):
         #parser.add_argument('--img_tmpl', type=str)
     if net_type in ['lstm', 'lstm_polar', 'lstm_diffs']:
         parser.add_argument('--lstm_feature', default='coords',
-                            choices=['coords', 'coords_dual', 'coords_polar','coords_diffs','vec_sum', 'vec_sum_dual'],
+                            choices=['coords', 'coords_bpv', 'coords_dual', 'coords_polar','coords_diffs','vec_sum', 'vec_sum_dual'],
                             help="lstm_input changes based on the choice."\
                             + "coords: 4,"\
                             + "coords with only_left/only_right: 2,"\
+                            + "coords_bpv: 356," \
                             + "coords_dual: 2," \
                             + "coords_polar: 8 for coords+dists+angles, 2 for angles," \
                             + "coords_diffs: 8 for coords+diffs," \

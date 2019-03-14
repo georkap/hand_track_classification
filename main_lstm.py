@@ -13,7 +13,7 @@ import torch.backends.cudnn as cudnn
 
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 #from models.lstm_hands_enc_dec import LSTM_Hands_encdec
-from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, resume_checkpoint, init_folders
@@ -59,6 +59,13 @@ def main():
                                                      max_seq_length=args.lstm_seq_size,
                                                      num_classes=args.verb_classes,
                                                      dual=args.lstm_dual)
+    elif args.lstm_feature == "coords_bpv":
+        train_loader = PointBpvDatasetLoader(args.train_list,
+                                             max_seq_length=args.lstm_seq_size,
+                                             norm_val=norm_val)
+        test_loader = PointBpvDatasetLoader(args.test_list,
+                                            max_seq_length=args.lstm_seq_size,
+                                            norm_val=norm_val)
     else:
         sys.exit("Unsupported lstm feature")
 #    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)  
