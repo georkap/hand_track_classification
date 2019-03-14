@@ -12,6 +12,7 @@ import os
 import pickle
 import cv2
 import numpy as np
+from scipy.spatial.distance import pdist, squareform
 import torch.utils.data
 from utils.video_sampler import RandomSampling, SequentialSampling
 
@@ -82,7 +83,7 @@ class DataLine(object):
         return self.data[0]
 
     @property
-    def num_frames(self):
+    def num_frames(self): # sto palio format ayto einai to start_frame
         return int(self.data[1])
 
     @property
@@ -92,6 +93,10 @@ class DataLine(object):
     @property
     def label_noun(self):
         return int(self.data[3])
+    
+    @property
+    def uid(self):
+        return int(self.data[4] if len(self.data) > 4 else -1)
     
     @property
     def start_frame(self):
@@ -182,12 +187,164 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         else:
             return clip_input, classes, self.video_list[index].data_path.split("\\")[-1]
 
+#TODO: this is for sliding window sample creation with a fixed sizes
+class PointPolarDatasetLoaderMultiSec(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+                 validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        # no mapping supported for now. only use all classes
+        self.norm_val = np.array(norm_val)
+        self.max_seq_length=max_seq_length
+        self.validation = validation
+        self.data_arr = []
+        for index in range(len(self.samples_list)):
+            hand_tracks = load_pickle(self.samples_list[index].data_path)
+            left_track = np.array(hand_tracks['left'], dtype=np.float32)
+            right_track = np.array(hand_tracks['right'], dtype=np.float32)
+            
+def load_left_right_tracks(hand_tracks, max_seq_length):
+    left_track = np.array(hand_tracks['left'], dtype=np.float32)
+    right_track = np.array(hand_tracks['right'], dtype=np.float32)
+    if max_seq_length != 0:
+        left_track = left_track[np.linspace(0, len(left_track), max_seq_length, endpoint=False, dtype=int)]
+        right_track = right_track[np.linspace(0, len(right_track), max_seq_length, endpoint=False, dtype=int)]
+    return left_track, right_track
+
+def make_diffs(track):
+    x2 = track[:,0]
+    x1 = np.roll(x2,1)
+    x1[0] = x1[1]
+    y2 = track[:,1]
+    y1 = np.roll(y2,1)
+    y1[0] = y1[1]
+    xdifs = x2-x1
+    ydifs = y2-y1
+    return np.concatenate((xdifs[:,np.newaxis],ydifs[:,np.newaxis]),-1)
+
+def make_angles(track):
+    x2 = track[:,0]
+    x1 = np.roll(x2, 1)
+    x1[0] = x1[1]
+    y2 = track[:,1]
+    y1 = np.roll(y2, 1)
+    y1[0] = y1[1]
+    angles = np.arctan2(y2*x1-y1*x2, x2*x1+y2*y1, dtype=np.float32)
+    return angles
+
+def make_dists(track):
+    return np.concatenate((np.array([0]),
+                           np.diagonal(squareform(pdist(track)), offset=-1)))
+
+class PointDiffDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+                 validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        self.norm_val = np.array(norm_val)
+        self.max_seq_length=max_seq_length
+        self.validation=validation
+        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
+        
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self, index):
+        left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
+        
+        left_track /= self.norm_val[:2]
+        right_track /= self.norm_val[2:]
+        
+        left_diffs = make_diffs(left_track)
+        right_diffs = make_diffs(right_track)
+        
+        points = np.concatenate((left_track, left_diffs, right_track, right_diffs),-1).astype(np.float32)
+        seq_size = len(points)
+        class_id = self.samples_list[index].label_verb
+        if not self.validation:
+            return points, seq_size, class_id
+        else:
+            name_parts = self.samples_list[index].data_path.split("\\")
+            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
+        
+
+class AnglesDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length=None, validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        # no mapping supported for now. only use all classes
+        self.max_seq_length=max_seq_length
+        self.validation = validation
+        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
+    
+    def __len__(self):
+        return len(self.samples_list)
+
+    def __getitem__(self,index):
+        left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
+        
+        left_angles = make_angles(left_track)
+        right_angles = make_angles(right_track)    
+
+        points = np.concatenate((left_angles[:, np.newaxis],
+                                 right_angles[:, np.newaxis]), -1).astype(np.float32)
+        seq_size = len(points)
+        
+        class_id = self.samples_list[index].label_verb
+        if not self.validation:
+            return points, seq_size, class_id
+        else:
+            name_parts = self.samples_list[index].data_path.split("\\")
+            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
+
+
+class PointPolarDatasetLoader(torch.utils.data.Dataset):
+        
+    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+                 validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        # no mapping supported for now. only use all classes
+        self.norm_val = np.array(norm_val)
+        self.max_seq_length=max_seq_length
+        self.validation = validation
+        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
+        
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self,index):
+        left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
+        
+        left_angles = make_angles(left_track)
+        right_angles = make_angles(right_track)
+        
+        left_track /= self.norm_val[:2]
+        right_track /= self.norm_val[2:]
+        
+        left_dist = np.concatenate((np.array([0]),
+                                   np.diagonal(squareform(pdist(left_track)), offset=-1)))
+        right_dist= np.concatenate((np.array([0]),
+                                   np.diagonal(squareform(pdist(right_track)), offset=-1)))
+
+        points = np.concatenate((left_track,
+                                 left_dist[:, np.newaxis],
+                                 left_angles[:, np.newaxis],
+                                 right_track,
+                                 right_dist[:, np.newaxis],
+                                 right_angles[:, np.newaxis]), -1).astype(np.float32)
+        seq_size = len(points)
+        
+        class_id = self.samples_list[index].label_verb
+        if not self.validation:
+            return points, seq_size, class_id
+        else:
+            name_parts = self.samples_list[index].data_path.split("\\")
+            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
+        
+
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
                  batch_transform=None, norm_val=[1.,1.,1.,1.], dual=False, 
                  clamp=False, only_left=False, only_right=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
-        if num_classes != 120:
+        if num_classes != 120 and num_classes != 125: #TODO: find a better way to apply mapping
             self.mapping = make_class_mapping(self.samples_list)
         else:
             self.mapping = None
@@ -404,41 +561,41 @@ class PointImageDatasetLoader(torch.utils.data.Dataset):
         
         return point_imgs[:256, :, :], seq_size, self.samples_list[index].label_verb
         
-if __name__=='__main__':
-    
-    from dataset_loader_utils import Resize, ResizePadFirst
-    
-    image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
-
-    resize_only = Resize((224,224), False, cv2.INTER_CUBIC)
-#    resize_pad = ResizeZeroPad(224, True, cv2.INTER_NEAREST)
-    cubic_pf_fun = ResizePadFirst(224, True, cv2.INTER_CUBIC)
-    linear_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR)
-    nearest_pf_fun = ResizePadFirst(224, True, cv2.INTER_NEAREST)
-    area_pf_fun = ResizePadFirst(224, True, cv2.INTER_AREA)
-    lanc_pf_fun = ResizePadFirst(224, True, cv2.INTER_LANCZOS4)
-    linext_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR_EXACT)
-
-    resize_nopad = resize_only(image)
-#    resize_pad_first = resize_pad(image)
-    
-    cubic_pf = cubic_pf_fun(image)
-#    cubic_pf = np.where(cubic_pf_fun(image) > 1, 255, 0).astype(np.float32)
-#    nearest_pf = np.where(nearest_pf_fun(image) > 1, 255, 0).astype(np.uint8)
-#    linear_pf = np.where(linear_pf_fun(image) > 1, 255 ,0).astype('uint8')
-#    area_pf = np.where(area_pf_fun(image) > 1, 255 ,0).astype('uint8')
-#    lanc_pf = np.where(lanc_pf_fun(image) > 1, 255, 0).astype('uint8')
-    linext_pf = linext_pf_fun(image)
-    
-    cv2.imshow('original', image)
-    cv2.imshow('original resize', resize_nopad)
-#    cv2.imshow('padded resize', resize_pad_first)
-    cv2.imshow('cubic', cubic_pf)
-#    cv2.imshow('nearest', nearest_pf)
-#    cv2.imshow('area', area_pf)
-#    cv2.imshow('lanc', lanc_pf)
-    cv2.imshow('linext', linext_pf)    
-    
-    cv2.waitKey(0)
-    
+#if __name__=='__main__':
+#    
+#    from dataset_loader_utils import Resize, ResizePadFirst
+#    
+#    image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)
+#
+#    resize_only = Resize((224,224), False, cv2.INTER_CUBIC)
+##    resize_pad = ResizeZeroPad(224, True, cv2.INTER_NEAREST)
+#    cubic_pf_fun = ResizePadFirst(224, True, cv2.INTER_CUBIC)
+#    linear_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR)
+#    nearest_pf_fun = ResizePadFirst(224, True, cv2.INTER_NEAREST)
+#    area_pf_fun = ResizePadFirst(224, True, cv2.INTER_AREA)
+#    lanc_pf_fun = ResizePadFirst(224, True, cv2.INTER_LANCZOS4)
+#    linext_pf_fun = ResizePadFirst(224, True, cv2.INTER_LINEAR_EXACT)
+#
+#    resize_nopad = resize_only(image)
+##    resize_pad_first = resize_pad(image)
+#    
+#    cubic_pf = cubic_pf_fun(image)
+##    cubic_pf = np.where(cubic_pf_fun(image) > 1, 255, 0).astype(np.float32)
+##    nearest_pf = np.where(nearest_pf_fun(image) > 1, 255, 0).astype(np.uint8)
+##    linear_pf = np.where(linear_pf_fun(image) > 1, 255 ,0).astype('uint8')
+##    area_pf = np.where(area_pf_fun(image) > 1, 255 ,0).astype('uint8')
+##    lanc_pf = np.where(lanc_pf_fun(image) > 1, 255, 0).astype('uint8')
+#    linext_pf = linext_pf_fun(image)
+#    
+#    cv2.imshow('original', image)
+#    cv2.imshow('original resize', resize_nopad)
+##    cv2.imshow('padded resize', resize_pad_first)
+#    cv2.imshow('cubic', cubic_pf)
+##    cv2.imshow('nearest', nearest_pf)
+##    cv2.imshow('area', area_pf)
+##    cv2.imshow('lanc', lanc_pf)
+#    cv2.imshow('linext', linext_pf)    
+#    
+#    cv2.waitKey(0)
+#    
     

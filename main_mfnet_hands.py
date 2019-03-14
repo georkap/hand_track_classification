@@ -7,6 +7,14 @@ main mfnet that classifies activities and predicts hand locations
 @author: Γιώργος
 """
 
+SOME CHANGES TO BE DONE BEFORE RUNNING THIS PROJECT
+# 1) In the dataloader Dataline is parsing two different files for points and videos
+# - for points self.data[1] is start frame
+# - for videos self.data[1] is num frames and self.data[5] is start frame
+#TODO: make these consistent in the split files (recreate the POINT SPLIT files) in the following format
+# line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb, noun, uid, start_frame)
+# 2) CHECK THE DATALOADER CLASSES for consistency with these changes
+
 import time
 import torch
 import torch.backends.cudnn as cudnn
