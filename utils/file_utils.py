@@ -166,15 +166,28 @@ def save_prev_checkpoint(pth_path):
     old_ckpt = os.path.join(os.path.dirname(pth_path), old_ckpt_name + "_{}{}_{}{}.pth".format(dtm.day, dtm.month, dtm.hour, dtm.minute))
     shutil.copyfile(pth_path, old_ckpt)
 
-def resume_checkpoint(model_ft, output_dir, model_name):
-    ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
-    save_prev_checkpoint(ckpt_path)
-    old_best_ckpt_path = os.path.join(output_dir, model_name + '_best.pth')
-    save_prev_checkpoint(old_best_ckpt_path)
+def prepare_resume_latest(output_dir, model_name, resume_from):
+    old_ckpt_path = os.path.join(output_dir, model_name + '_ckpt.pth')
+    save_prev_checkpoint(old_ckpt_path)
+    old_best_path = os.path.join(output_dir, model_name + '_best.pth')
+    save_prev_checkpoint(old_best_path)
     
+    ckpt_path = old_ckpt_path if resume_from == "ckpt" else old_best_path
+    return ckpt_path
+
+def load_checkpoint(ckpt_path, model_ft):
     checkpoint = torch.load(ckpt_path)    
     model_ft.load_state_dict(checkpoint['state_dict'])
     return model_ft
+
+def resume_checkpoint(model_ft, output_dir, model_name, resume_from):
+    if resume_from in ["ckpt", "best"]: 
+        # resume from ckpt or best and rename the previous weights
+        ckpt_path = prepare_resume_latest(output_dir, model_name, resume_from)        
+    else: # using a new model structure so the old weights are not overwritten or we just dont care
+        ckpt_path = resume_from
+    
+    return load_checkpoint(ckpt_path, model_ft), ckpt_path
 
 def get_log_files(LOG_DIR, pattern, walk):
     log_files = []

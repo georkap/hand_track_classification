@@ -32,9 +32,10 @@ def main():
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
-    if args.resume:
-        model_ft = resume_checkpoint(model_ft, output_dir, model_name)
     print_and_save("Model loaded to gpu", log_file)
+    if args.resume:
+        model_ft, ckpt_path = resume_checkpoint(model_ft, output_dir, model_name, args.resume_from)
+        print_and_save("Resuming training from: {}".format(ckpt_path), log_file)
 
     if args.only_left and args.only_right:
         sys.exit("It must be at most one of *only_left* or *only_right* True at any time.")

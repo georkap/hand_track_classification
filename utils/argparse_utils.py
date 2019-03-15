@@ -117,6 +117,7 @@ def parse_args_program(parser):
     parser.add_argument('--save_attentions', default=False, action='store_true')
     parser.add_argument('--logging', default=False, action='store_true')
     parser.add_argument('--resume', default=False, action='store_true')
+    parser.add_argument('--resume_from', type=str, default="", help="specify where to resume from otherwise resume from last checkpoint")
     
     return parser
     
@@ -209,6 +210,7 @@ def make_model_name(args, net_type):
     if args.lr_type == "clr":
         clr_type = "tri" if args.lr_steps[4] == "triangular" else "tri2" if args.lr_steps[4] == "triangular2" else "exp"
         model_name = model_name + "_{}".format(clr_type)
+        model_name = model_name + str(args.lr_steps[0]).split('.')[0] + str(args.lr_steps[0]).split('.')[1] + '-' + str(args.lr_steps[1]).split('.')[0] + str(args.lr_steps[1]).split('.')[1]
     model_name = model_name + "_vsel{}".format(args.verb_classes)
     if args.double_output:
         model_name = model_name + "_nsel{}".format(args.noun_classes)

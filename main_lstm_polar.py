@@ -29,9 +29,10 @@ def main():
     kwargs = {'dropout':args.dropout, 'bidir':args.lstm_bidir}
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
-    if args.resume:
-        model_ft = resume_checkpoint(model_ft, output_dir, model_name)
     print_and_save("Model loaded to gpu", log_file)
+    if args.resume:
+        model_ft, ckpt_path = resume_checkpoint(model_ft, output_dir, model_name, args.resume_from)
+        print_and_save("Resuming training from: {}".format(ckpt_path), log_file)
 
     norm_val = [1., 1., 1., 1.] if args.no_norm_input else [456., 256., 456., 256.]
 
