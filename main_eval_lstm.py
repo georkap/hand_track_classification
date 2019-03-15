@@ -18,7 +18,7 @@ import torch.utils.data
 import torch.backends.cudnn as cudnn
 
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
-from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
 from utils.argparse_utils import parse_args
@@ -197,6 +197,11 @@ def main():
                                                         num_classes=args.verb_classes,
                                                         dual=args.lstm_dual, 
                                                         validation=True)
+    elif args.lstm_feature == "coords_bpv":
+        dataset_loader = PointBpvDatasetLoader(args.val_list,
+                                               max_seq_length=args.lstm_seq_size,
+                                               norm_val=norm_val,
+                                               validation=True)
     else:
         sys.exit("Unsupported lstm feature")
 
