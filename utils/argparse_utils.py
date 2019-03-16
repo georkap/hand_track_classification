@@ -21,6 +21,8 @@ def make_base_parser(val):
     else:
         parser.add_argument('ckpt_path', type=str)
         parser.add_argument('val_list', type=str)
+    parser.add_argument('--bpv_prefix', type=str, default=None, choice=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
+    parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
     
@@ -43,11 +45,12 @@ def parse_args_dataset(parser, net_type):
         #parser.add_argument('--img_tmpl', type=str)
     if net_type in ['lstm', 'lstm_polar', 'lstm_diffs']:
         parser.add_argument('--lstm_feature', default='coords',
-                            choices=['coords', 'coords_bpv', 'coords_dual', 'coords_polar','coords_diffs','vec_sum', 'vec_sum_dual'],
+                            choices=['coords', 'coords_bpv', 'coords_objects', 'coords_dual', 'coords_polar','coords_diffs','vec_sum', 'vec_sum_dual'],
                             help="lstm_input changes based on the choice."\
                             + "coords: 4,"\
                             + "coords with only_left/only_right: 2,"\
                             + "coords_bpv: 356," \
+                            + "coords_objects: 708," \
                             + "coords_dual: 2," \
                             + "coords_polar: 8 for coords+dists+angles, 2 for angles," \
                             + "coords_diffs: 8 for coords+diffs," \
@@ -215,7 +218,9 @@ def make_model_name(args, net_type):
     if args.double_output:
         model_name = model_name + "_nsel{}".format(args.noun_classes)
     if args.mixup_a != 1.:
-        model_name = model_name + "_mixup"   
+        model_name = model_name + "_mixup" 
+
+    model_name = model_name + args.append_to_model_name
     
     return model_name
 

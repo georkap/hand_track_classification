@@ -110,6 +110,8 @@ hand_detection_tracks
 frames_rgb_flow
 hand_detection_tracks_fd_train
 noun_bpv_oh
+tracked_noun_bpv_oh_mh0
+cln_noun_tracks_mh0
 
 batch_*
 lstm_tests.py

@@ -18,7 +18,7 @@ import torch.utils.data
 import torch.backends.cudnn as cudnn
 
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
-from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader, PointObjDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
 from utils.argparse_utils import parse_args
@@ -173,7 +173,7 @@ def main():
     cudnn.benchmark = True
         
     lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
-    kwargs = {'dropout': 0, 'bidir':args.lstm_bidir}    
+    kwargs = {'dropout':args.dropout, 'bidir':args.lstm_bidir, 'noun_classes':args.noun_classes, 'double_output':args.double_output}
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path)    
@@ -198,9 +198,16 @@ def main():
                                                         dual=args.lstm_dual, 
                                                         validation=True)
     elif args.lstm_feature == "coords_bpv":
-        dataset_loader = PointBpvDatasetLoader(args.val_list,
-                                               max_seq_length=args.lstm_seq_size,
+        dataset_loader = PointBpvDatasetLoader(args.val_list, args.lstm_seq_size,
+                                               args.double_output,
                                                norm_val=norm_val,
+                                               bpv_prefix=args.bpv_prefix,
+                                               validation=True)
+    elif args.lstm_feature == "coords_objects":
+        dataset_loader = PointObjDatasetLoader(args.val_list, args.lstm_seq_size,
+                                               args.double_output,
+                                               norm_val=norm_val, 
+                                               bpv_prefix=args.bpv_prefix,
                                                validation=True)
     else:
         sys.exit("Unsupported lstm feature")

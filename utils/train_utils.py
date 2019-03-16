@@ -333,6 +333,96 @@ def test_attn_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg
 
+def train_lstm_do(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
+    batch_time, losses_a, losses_b, losses, top1_a, top5_a, top1_b, top5_b = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    model.train()
+    
+    if not isinstance(lr_scheduler, CyclicLR):
+        lr_scheduler.step()
+        
+    print_and_save('*********', log_file)
+    print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
+    t0 = time.time()
+    for batch_idx, (inputs, seq_lengths, targets) in enumerate(train_iterator):
+        if isinstance(lr_scheduler, CyclicLR):
+            lr_scheduler.step()
+            
+        inputs = torch.tensor(inputs, requires_grad=True).cuda()
+        inputs = inputs.transpose(1, 0)
+        output_a, output_b = model(inputs)
+        
+        targets_a = torch.tensor(targets[0]).cuda()
+        targets_b = torch.tensor(targets[1]).cuda()        
+        loss_a = criterion(output_a, targets_a)
+        loss_b = criterion(output_b, targets_b)
+        loss = 0.75*loss_a + 0.25*loss_b
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+        t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
+        top1_a.update(t1_a.item(), output_a.size(0))
+        top5_a.update(t5_a.item(), output_a.size(0))
+        top1_b.update(t1_b.item(), output_b.size(0))
+        top5_b.update(t5_b.item(), output_b.size(0))
+        losses_a.update(loss_a.item(), output_a.size(0))
+        losses_b.update(loss_b.item(), output_b.size(0))
+        losses.update(loss.item(), output_a.size(0))
+        batch_time.update(time.time() - t0)
+        t0 = time.time()
+        to_print = '[Epoch:{}, Batch {}/{} in {:.3f} s]'\
+                   '[Losses {:.4f}[avg:{:.4f}], loss_a {:.4f}[avg:{:.4f}], loss_b {:.4f}[avg:{:.4f}],' \
+                   'Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+                   'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]],' \
+                   'LR {:.6f}'.format(
+                           cur_epoch, batch_idx, len(train_iterator), batch_time.val,
+                           losses_a.val, losses_a.avg, losses_b.val, losses_b.avg, losses.val, losses.avg,
+                           top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
+                           top1_b.val, top1_b.avg, top5_b.val, top5_b.avg,
+                           lr_scheduler.get_lr()[0])
+        print_and_save(to_print, log_file)
+
+def test_lstm_do(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+    losses, losses_a, losses_b, top1_a, top5_a, top1_b, top5_b = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    with torch.no_grad():
+        model.eval()
+        print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+        for batch_idx, (inputs, seq_lengths, targets) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            inputs = inputs.transpose(1, 0)
+
+            output_a, output_b = model(inputs)
+            
+            targets_a = torch.tensor(targets[0]).cuda()
+            targets_b = torch.tensor(targets[1]).cuda()
+            loss_a = criterion(output_a, targets_a)
+            loss_b = criterion(output_b, targets_b)
+            loss = 0.75*loss_a + 0.25*loss_b
+            
+            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
+            top1_a.update(t1_a.item(), output_a.size(0))
+            top5_a.update(t5_a.item(), output_a.size(0))
+            top1_b.update(t1_b.item(), output_b.size(0))
+            top5_b.update(t5_b.item(), output_b.size(0))
+            losses_a.update(loss_a.item(), output_a.size(0))
+            losses_b.update(loss_b.item(), output_b.size(0))
+            losses.update(loss.item(), output_a.size(0))
+            
+            to_print = '[Epoch:{}, Batch {}/{}]' \
+                       '[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+                       'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]'.format(
+                       cur_epoch, batch_idx, len(test_iterator),
+                       top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
+                       top1_b.val, top1_b.avg, top5_b.val, top5_b.avg)
+            print_and_save(to_print, log_file)
+
+        print_and_save('{} Results: Loss {:.3f}, Top1_a {:.3f}, Top5_a {:.3f}, Top1_b {:.3f}, Top5_b {:.3f}'.format(dataset, losses.avg, top1_a.avg, top5_a.avg, top1_b.avg, top5_b.avg), log_file)
+    return top1_a.avg, top1_b.avg
+        
+
 def train_lstm(model, optimizer, criterion, train_iterator, cur_epoch, log_file, lr_scheduler):
     batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()

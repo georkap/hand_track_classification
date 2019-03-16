@@ -19,13 +19,17 @@ class LSTM_Hands(nn.Module):
         self.num_layers = num_layers
         self.dropout = kwargs.get('dropout')
         self.bidir = kwargs.get('bidir')
-        
+        self.noun_classes = kwargs.get('noun_classes')
+        self.double_output = kwargs.get('double_output')
+
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, 
                             bias=True, batch_first=False, dropout=0.0, bidirectional=self.bidir)
         self.dropout = nn.Dropout(p=self.dropout)
         
         output_features = hidden_size*2 if self.bidir else hidden_size
         self.fc = nn.Linear(output_features, num_classes)  
+        if self.double_output:
+            self.fc2 = nn.Linear(output_features, self.noun_classes)
     
     def forward(self, seq_batch_coords, seq_length):
         if self.bidir:
@@ -47,9 +51,13 @@ class LSTM_Hands(nn.Module):
         
         out = torch.cat((out_for, out_back), dim=-1)
         out = self.dropout(out)
-        out = self.fc(out)
-        
-        return out
+        if self.double_output:
+            out_verb = self.fc(out)
+            out_noun = self.fc2(out)
+            return out_verb, out_noun 
+        else:    
+            out = self.fc(out)
+            return out
 
     def forward_onedir(self, seq_batch_coords, seq_lengths):
         # seq_batch_coords is sorted descending in sequence size so we can pad
@@ -80,9 +88,14 @@ class LSTM_Hands(nn.Module):
 #        out = lstm_out[seq_lengths-1, list(range(batch_size)), :]
 
         out = self.dropout(out)        
-        out = self.fc(out)
         
-        return out
+        if self.double_output:
+            out_verb = self.fc(out)
+            out_noun = self.fc2(out)
+            return out_verb, out_noun 
+        else:    
+            out = self.fc(out)
+            return out
 
 class LSTM_per_hand(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes, **kwargs):

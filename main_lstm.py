@@ -13,11 +13,11 @@ import torch.backends.cudnn as cudnn
 
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 #from models.lstm_hands_enc_dec import LSTM_Hands_encdec
-from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader
+from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader, PointObjDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, resume_checkpoint, init_folders
-from utils.train_utils import load_lr_scheduler, train_lstm, test_lstm, train_attn_lstm, test_attn_lstm
+from utils.train_utils import load_lr_scheduler, train_lstm, test_lstm, train_attn_lstm, test_attn_lstm, train_lstm_do, test_lstm_do
 
 def main():
     args, model_name = parse_args('lstm', val=False)
@@ -28,7 +28,7 @@ def main():
     cudnn.benchmark = True
 
     lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
-    kwargs = {'dropout':args.dropout, 'bidir':args.lstm_bidir}
+    kwargs = {'dropout':args.dropout, 'bidir':args.lstm_bidir, 'noun_classes':args.noun_classes, 'double_output':args.double_output}
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
 #    model_ft = LSTM_Hands_encdec(456, 64, 32, args.lstm_layers, verb_classes, 0)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
@@ -61,12 +61,20 @@ def main():
                                                      num_classes=args.verb_classes,
                                                      dual=args.lstm_dual)
     elif args.lstm_feature == "coords_bpv":
-        train_loader = PointBpvDatasetLoader(args.train_list,
-                                             max_seq_length=args.lstm_seq_size,
-                                             norm_val=norm_val)
-        test_loader = PointBpvDatasetLoader(args.test_list,
-                                            max_seq_length=args.lstm_seq_size,
-                                            norm_val=norm_val)
+        train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
+                                             args.double_output, norm_val=norm_val,
+                                             bpv_prefix=args.bpv_prefix)
+        test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
+                                            args.double_output, norm_val=norm_val,
+                                            bpv_prefix=args.bpv_prefix)
+    elif args.lstm_feature == "coords_objects":
+        train_loader = PointObjDatasetLoader(args.train_list, args.lstm_seq_size,
+                                             args.double_output, norm_val=norm_val,
+                                             bpv_prefix=args.bpv_prefix)
+        test_loader = PointObjDatasetLoader(args.test_list, args.lstm_seq_size,
+                                            args.double_output, norm_val=norm_val,
+                                            bpv_prefix=args.bpv_prefix)
+    
     else:
         sys.exit("Unsupported lstm feature")
 #    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)  
@@ -87,8 +95,11 @@ def main():
 
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
-    train_fun, test_fun = (train_attn_lstm, test_attn_lstm) if args.lstm_attn else (train_lstm, test_lstm)
-    new_top1, top1 = 0.0, 0.0
+    train_fun, test_fun = (train_attn_lstm, test_attn_lstm) if args.lstm_attn else (train_lstm_do, test_lstm_do) if args.double_output else (train_lstm, test_lstm)
+    if not args.double_output:
+        new_top1, top1 = 0.0, 0.0
+    else:
+        new_top1, top1 = (0.0, 0.0), (0.0, 0.0)
     for epoch in range(args.max_epochs):
         train_fun(model_ft, optimizer, ce_loss, train_iterator, epoch, log_file, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:

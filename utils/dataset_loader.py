@@ -356,16 +356,59 @@ class PointPolarDatasetLoader(torch.utils.data.Dataset):
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
-        
-class PointBpvDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length, norm_val=[1.,1.,1.,1.],
-                 validation=False):
+
+class PointObjDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length, double_output,
+                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
+        self.double_output = double_output
         self.max_seq_length = max_seq_length
-        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, 'noun_bpv_oh') for index in range(len(self.samples_list))]
+        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, bpv_prefix) for index in range(len(self.samples_list))]
+    
+    def __len__(self):
+        return len(self.samples_list)
+    
+    def __getitem__(self, index):
+        hand_tracks, object_tracks = self.data_arr[index]
+        left_track, right_track = load_left_right_tracks(hand_tracks, self.max_seq_length)
+        
+        left_track /= self.norm_val[:2]
+        right_track /= self.norm_val[2:]
+        
+        if self.max_seq_length != 0:
+            object_tracks = object_tracks[np.linspace(0, len(object_tracks), self.max_seq_length, endpoint=False, dtype=int)]
+        object_tracks = object_tracks / np.tile(self.norm_val[:2], 352)
+        
+        points = np.concatenate((left_track, right_track, object_tracks),
+                                -1).astype(np.float32)
+        seq_size = len(points)
+        
+        verb_id = self.samples_list[index].label_verb
+        if self.double_output:            
+            noun_id = self.video_list[index].label_noun
+            classes = (verb_id, noun_id)
+        else:
+            classes = verb_id
+        
+        if not self.validation:
+            return points, seq_size, classes
+        else:
+            name_parts = self.samples_list[index].data_path.split("\\")
+            return points, seq_size, classes, name_parts[-2] + "\\" + name_parts[-1]
+
+class PointBpvDatasetLoader(torch.utils.data.Dataset):
+    def __init__(self, list_file, max_seq_length, double_output,
+                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False):
+        self.samples_list = parse_samples_list(list_file)
+        # no mapping supported for now. only use all classes
+        self.norm_val = np.array(norm_val)
+        self.validation = validation
+        self.double_output = double_output
+        self.max_seq_length = max_seq_length
+        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, bpv_prefix) for index in range(len(self.samples_list))]
     
     def __len__(self):
         return len(self.samples_list)
@@ -384,12 +427,18 @@ class PointBpvDatasetLoader(torch.utils.data.Dataset):
                                  bpv), -1).astype(np.float32)
         seq_size = len(points)
         
-        class_id = self.samples_list[index].label_verb
+        verb_id = self.samples_list[index].label_verb
+        if self.double_output:            
+            noun_id = self.video_list[index].label_noun
+            classes = (verb_id, noun_id)
+        else:
+            classes = verb_id
+            
         if not self.validation:
-            return points, seq_size, class_id
+            return points, seq_size, classes
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
-            return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
+            return points, seq_size, classes, name_parts[-2] + "\\" + name_parts[-1]
 
 class PointDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120, 
