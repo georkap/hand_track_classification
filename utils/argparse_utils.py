@@ -21,7 +21,7 @@ def make_base_parser(val):
     else:
         parser.add_argument('ckpt_path', type=str)
         parser.add_argument('val_list', type=str)
-    parser.add_argument('--bpv_prefix', type=str, default=None, choice=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
+    parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
     parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
