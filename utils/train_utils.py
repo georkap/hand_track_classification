@@ -349,7 +349,7 @@ def train_lstm_do(model, optimizer, criterion, train_iterator, cur_epoch, log_fi
             
         inputs = torch.tensor(inputs, requires_grad=True).cuda()
         inputs = inputs.transpose(1, 0)
-        output_a, output_b = model(inputs)
+        output_a, output_b = model(inputs, seq_lengths)
         
         targets_a = torch.tensor(targets[0]).cuda()
         targets_b = torch.tensor(targets[1]).cuda()        
@@ -393,7 +393,7 @@ def test_lstm_do(model, criterion, test_iterator, cur_epoch, dataset, log_file):
             inputs = torch.tensor(inputs).cuda()
             inputs = inputs.transpose(1, 0)
 
-            output_a, output_b = model(inputs)
+            output_a, output_b = model(inputs, seq_lengths)
             
             targets_a = torch.tensor(targets[0]).cuda()
             targets_b = torch.tensor(targets[1]).cuda()
