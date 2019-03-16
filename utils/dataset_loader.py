@@ -388,7 +388,7 @@ class PointObjDatasetLoader(torch.utils.data.Dataset):
         
         verb_id = self.samples_list[index].label_verb
         if self.double_output:            
-            noun_id = self.video_list[index].label_noun
+            noun_id = self.samples_list[index].label_noun
             classes = (verb_id, noun_id)
         else:
             classes = verb_id
@@ -429,7 +429,7 @@ class PointBpvDatasetLoader(torch.utils.data.Dataset):
         
         verb_id = self.samples_list[index].label_verb
         if self.double_output:            
-            noun_id = self.video_list[index].label_noun
+            noun_id = self.samples_list[index].label_noun
             classes = (verb_id, noun_id)
         else:
             classes = verb_id
