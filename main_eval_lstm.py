@@ -240,8 +240,8 @@ def main():
         print_and_save("Classes are {}".format(valid_verb_indices), log_file)
         print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre_verbs, ave_rec_verbs), log_file)
         print_and_save("Most common verbs in training", log_file)
-        print_and_save("15 verbs rec {}".format(recall[verb_ids_sorted[:15]]))
-        print_and_save("15 verbs pre {}".format(precision[verb_ids_sorted[:15]]))
+        print_and_save("15 verbs rec {}".format(recall[verb_ids_sorted[:15]]), log_file)
+        print_and_save("15 verbs pre {}".format(precision[verb_ids_sorted[:15]]), log_file)
         
     print_and_save("Cls Rec {}".format(recall), log_file)
     print_and_save("Cls Pre {}".format(precision), log_file)
