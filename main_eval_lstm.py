@@ -20,7 +20,7 @@ import torch.backends.cudnn as cudnn
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader, PointObjDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
-from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
+from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels, get_classes, avg_rec_prec_trimmed
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 
@@ -225,14 +225,21 @@ def main():
     validate = validate_lstm_attn if args.lstm_attn else validate_lstm
     top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file, args)
 
-    #video_pred = [np.argmax(x[0].detach().cpu().numpy()) for x in outputs]
-    #video_labels = [x[1].cpu().numpy() for x in outputs]
     video_preds = [x[0] for x in outputs]
     video_labels = [x[1] for x in outputs]
 
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
 
     print_and_save(cf, log_file)
+    
+    if args.annotations_path:
+        valid_verb_indices, _ = get_classes(args.annotations_path, args.val_list, 100)
+        all_verb_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
+        ave_pre_verbs, ave_rec_verbs, _ = avg_rec_prec_trimmed(video_preds, video_labels, valid_verb_indices, all_verb_indices)
+        print_and_save("Verbs > 100 instances at training:", log_file)
+        print_and_save("Classes are {}".format(valid_verb_indices), log_file)
+        print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre_verbs, ave_rec_verbs), log_file)
+        
     print_and_save("Cls Rec {}".format(recall), log_file)
     print_and_save("Cls Pre {}".format(precision), log_file)
     print_and_save("Cls Acc {}".format(cls_acc), log_file)
