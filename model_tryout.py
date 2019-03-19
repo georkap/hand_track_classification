@@ -163,8 +163,8 @@ right_track = np.array(hand_tracks['right'], dtype=np.float32)
 #paths = [os.path.join(trc_base, x) for x in path_names]
 #left_track, right_track = load_multiple_tracks(paths)
 
-left_track = left_track[np.linspace(0, len(left_track), 32, endpoint=False, dtype=int)]
-right_track = right_track[np.linspace(0, len(right_track), 32, endpoint=False, dtype=int)]
+left_track = left_track[np.linspace(0, len(left_track), 192, endpoint=False, dtype=int)]
+right_track = right_track[np.linspace(0, len(right_track), 192, endpoint=False, dtype=int)]
 left_angles = make_angles(left_track)
 right_angles = make_angles(right_track)
 left_track /= norm_val[:2]
@@ -190,3 +190,6 @@ with torch.no_grad():
 #        print(out.topk(5)[1].cpu().detach().numpy())
 #    loss = criterion(output, targets)
 visualize_prediction(points, output)
+
+#%%
+visualize_points(points)

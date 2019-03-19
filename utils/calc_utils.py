@@ -57,6 +57,8 @@ def get_classes(annotations_file, split_path, num_instances):
     nouns_training = dict(zip(nouns_t_un, nouns_t_count))
 #    verbs_val = dict(zip(verbs_v_un, verbs_v_count))
 #    nouns_val = dict(zip(nouns_v_un, nouns_v_count))
+    verb_ids_sorted = list(reversed(np.argsort(verbs_t_count)))
+    noun_ids_sorted = list(reversed(np.argsort(nouns_t_count)))
     
     verbs_t_instances, nouns_t_instances = {}, {}
     for key, item in verbs_training.items():
@@ -65,7 +67,7 @@ def get_classes(annotations_file, split_path, num_instances):
     for key, item in nouns_training.items():
         if int(item) >= num_instances:
             nouns_t_instances[key] = item    
-    return list(verbs_t_instances.keys()), list(nouns_t_instances.keys()) # return two lists of indices. 1 to point to verb classes, 1 to point to noun classes
+    return list(verbs_t_instances.keys()), verb_ids_sorted, list(nouns_t_instances.keys()), noun_ids_sorted
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""

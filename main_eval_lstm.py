@@ -233,12 +233,15 @@ def main():
     print_and_save(cf, log_file)
     
     if args.annotations_path:
-        valid_verb_indices, _ = get_classes(args.annotations_path, args.val_list, 100)
+        valid_verb_indices, verb_ids_sorted, _, _= get_classes(args.annotations_path, args.val_list, 100)
         all_verb_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
         ave_pre_verbs, ave_rec_verbs, _ = avg_rec_prec_trimmed(video_preds, video_labels, valid_verb_indices, all_verb_indices)
         print_and_save("Verbs > 100 instances at training:", log_file)
         print_and_save("Classes are {}".format(valid_verb_indices), log_file)
         print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre_verbs, ave_rec_verbs), log_file)
+        print_and_save("Most common verbs in training", log_file)
+        print_and_save("15 verbs rec {}".format(recall[verb_ids_sorted]))
+        print_and_save("15 verbs pre {}".format(precision[verb_ids_sorted]))
         
     print_and_save("Cls Rec {}".format(recall), log_file)
     print_and_save("Cls Pre {}".format(precision), log_file)
