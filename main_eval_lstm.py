@@ -173,7 +173,7 @@ def main():
     cudnn.benchmark = True
         
     lstm_model = LSTM_per_hand if args.lstm_dual else LSTM_Hands_attn if args.lstm_attn else LSTM_Hands
-    kwargs = {'dropout':args.dropout, 'bidir':args.lstm_bidir, 'noun_classes':args.noun_classes, 'double_output':args.double_output}
+    kwargs = {'dropout':0, 'bidir':args.lstm_bidir, 'noun_classes':args.noun_classes, 'double_output':args.double_output}
     model_ft = lstm_model(args.lstm_input, args.lstm_hidden, args.lstm_layers, args.verb_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path)    

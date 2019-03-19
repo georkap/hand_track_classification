@@ -80,8 +80,8 @@ def main():
 #    train_loader = PointImageDatasetLoader(train_list, norm_val=norm_val)  
 #    test_loader = PointImageDatasetLoader(test_list, norm_val=norm_val)
 
-    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True)#collate_fn=lstm_collate, 
-    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True)#collate_fn=lstm_collate, 
+    train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, collate_fn=lstm_collate)
+    test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, collate_fn=lstm_collate)
 
     params_to_update = model_ft.parameters()
     print_and_save("Params to learn:", log_file)

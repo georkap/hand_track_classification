@@ -18,6 +18,29 @@ import cv2
 fr_width = 456
 fr_height = 256
 split_color = (1.,1.,1.)
+
+def visualize_points(points):
+    left_track = (points[:,:2] * [456,256]).astype(np.int)
+    right_track = (points[:,4:6] * [456,256]).astype(np.int)
+    
+    dir_base= r"D:\imgs"
+    os.mkdir(dir_base)
+    
+    num_points = len(left_track)
+    image = np.ones([fr_height,fr_width,3])
+    for i, (left, right) in enumerate(zip(left_track, right_track)):
+        left_color = (1., i/num_points, 0.)
+        right_color = (1., 0., i/num_points)
+        if left[0] < fr_width and left[1] < fr_height:                
+            image[int(left[1]), int(left[0])] = left_color
+        if right[0] < fr_width and right[1] < fr_height:
+            image[int(right[1]), int(right[0])] = right_color
+        
+#        cv2.imshow("tracks full", cv2.resize(image, (456*2, 256*2)))
+#        cv2.waitKey(0)
+        
+        cv2.imwrite(os.path.join(dir_base, "frame_{:010d}.jpg".format(i)), np.array(image[100:,100:]*255, dtype=np.uint8))
+    
 def visualize_prediction(points, outputs):
     left_track = (points[:,:2] * [456,256]).astype(np.int)
     left_dist = points[:,2]
@@ -120,13 +143,15 @@ model_ft.eval()
 print_and_save("Model loaded to gpu", log_file)
 criterion=torch.nn.CrossEntropyLoss().cuda()
 
+#%%
 norm_val = [1., 1., 1., 1.] if no_norm_input else [456., 256., 456., 256.]
 norm_val = np.array(norm_val)
 #dataset_loader = PointPolarDatasetLoader(val_list, max_seq_length=lstm_seq_size,
 #                                         norm_val=norm_val, validation=True)
 
 #track_path = r"D:\Code\epic-kitchens-processing\output\yolo_allhands_tracked_videos\clean\P01\P01_04.pkl"
-track_path = r"D:\Datasets\egocentric\EPIC_KITCHENS\clean_hand_detection_tracks\P30\P30_05\179200_5_140.pkl"
+#track_path = r"D:\Datasets\egocentric\EPIC_KITCHENS\clean_hand_detection_tracks\P30\P30_05\179200_5_140.pkl"
+track_path = r"D:\Datasets\egocentric\EPIC_KITCHENS\clean_hand_detection_tracks\P30\P30_05\81347_4_11.pkl"
 hand_tracks = load_pickle(track_path)
 left_track = np.array(hand_tracks['left'], dtype=np.float32)
 right_track = np.array(hand_tracks['right'], dtype=np.float32)
@@ -138,8 +163,8 @@ right_track = np.array(hand_tracks['right'], dtype=np.float32)
 #paths = [os.path.join(trc_base, x) for x in path_names]
 #left_track, right_track = load_multiple_tracks(paths)
 
-#left_track = left_track[np.linspace(0, len(left_track),16, endpoint=False, dtype=int)]
-#right_track = right_track[np.linspace(0, len(right_track), 16, endpoint=False, dtype=int)]
+left_track = left_track[np.linspace(0, len(left_track), 32, endpoint=False, dtype=int)]
+right_track = right_track[np.linspace(0, len(right_track), 32, endpoint=False, dtype=int)]
 left_angles = make_angles(left_track)
 right_angles = make_angles(right_track)
 left_track /= norm_val[:2]
