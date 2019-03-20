@@ -75,8 +75,8 @@ def validate_lstm_do(model, criterion, test_iterator, cur_epoch, dataset, log_fi
             
             output_a, output_b = model(inputs, seq_lengths)
             
-            targets_a = torch.tensor(targets[0]).cuda()
-            targets_b = torch.tensor(targets[1]).cuda()
+            targets_a = torch.tensor(targets[:,0]).cuda()
+            targets_b = torch.tensor(targets[:,1]).cuda()
             loss_a = criterion(output_a, targets_a)
             loss_b = criterion(output_b, targets_b)
             loss = 0.75*loss_a + 0.25*loss_b
