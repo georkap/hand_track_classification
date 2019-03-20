@@ -389,7 +389,7 @@ class PointObjDatasetLoader(torch.utils.data.Dataset):
         verb_id = self.samples_list[index].label_verb
         if self.double_output:            
             noun_id = self.samples_list[index].label_noun
-            classes = np.array([verb_id, noun_id])
+            classes = np.array([verb_id, noun_id], dtype=np.int64)
         else:
             classes = verb_id
         
@@ -430,7 +430,7 @@ class PointBpvDatasetLoader(torch.utils.data.Dataset):
         verb_id = self.samples_list[index].label_verb
         if self.double_output:            
             noun_id = self.samples_list[index].label_noun
-            classes = np.array([verb_id, noun_id])
+            classes = np.array([verb_id, noun_id], dtype=np.int64)
         else:
             classes = verb_id
             
