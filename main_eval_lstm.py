@@ -20,7 +20,7 @@ import torch.backends.cudnn as cudnn
 from models.lstm_hands import LSTM_Hands, LSTM_per_hand, LSTM_Hands_attn
 from utils.dataset_loader import PointDatasetLoader, PointVectorSummedDatasetLoader, PointBpvDatasetLoader, PointObjDatasetLoader
 from utils.dataset_loader_utils import lstm_collate
-from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels, get_classes, avg_rec_prec_trimmed
+from utils.calc_utils import AverageMeter, accuracy, eval_final_print
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 
@@ -61,6 +61,57 @@ def validate_lstm(model, criterion, test_iterator, cur_epoch, dataset, log_file,
                     batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
         print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
     return top1.avg, outputs
+
+def validate_lstm_do(model, criterion, test_iterator, cur_epoch, dataset, log_file, args):
+    losses, losses_a, losses_b, top1_a, top5_a, top1_b, top5_b = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    outputs_a, outputs_b = [], []
+    
+    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, seq_lengths, targets, video_names) in enumerate(test_iterator):
+            inputs = torch.tensor(inputs).cuda()
+            inputs = inputs.transpose(1,0)
+            
+            output_a, output_b = model(inputs, seq_lengths)
+            
+            targets_a = torch.tensor(targets[0]).cuda()
+            targets_b = torch.tensor(targets[1]).cuda()
+            loss_a = criterion(output_a, targets_a)
+            loss_b = criterion(output_b, targets_b)
+            loss = 0.75*loss_a + 0.25*loss_b
+            
+            batch_preds = []
+            for j in range(output_a.size(0)):
+                res_a = np.argmax(output_a[j].detach().cpu().numpy())
+                res_b = np.argmax(output_b[j].detach().cpu().numpy())
+                label_a = targets_a[j].cpu().numpy()
+                label_b = targets_b[j].cpu().numpy()
+                outputs_a.append([res_a, label_a])
+                outputs_b.append([res_b, label_b])
+                batch_preds.append("{}, a P-L:{}-{}, b P-L:{}-{}".format(video_names[j], res_a, label_a, res_b, label_b))
+
+            t1_a, t5_a = accuracy(output_a.detach().cpu(), targets_a.detach().cpu(), topk=(1,5))
+            t1_b, t5_b = accuracy(output_b.detach().cpu(), targets_b.detach().cpu(), topk=(1,5))
+            top1_a.update(t1_a.item(), output_a.size(0))
+            top5_a.update(t5_a.item(), output_a.size(0))
+            top1_b.update(t1_b.item(), output_b.size(0))
+            top5_b.update(t5_b.item(), output_b.size(0))
+            losses_a.update(loss_a.item(), output_a.size(0))
+            losses_b.update(loss_b.item(), output_b.size(0))
+            losses.update(loss.item(), output_a.size(0))
+
+            to_print = '[Batch {}/{}]' \
+                '[Top1_a {:.3f}[avg:{:.3f}], Top5_a {:.3f}[avg:{:.3f}],' \
+                'Top1_b {:.3f}[avg:{:.3f}], Top5_b {:.3f}[avg:{:.3f}]]\n\t{}'.format(
+                batch_idx, len(test_iterator),
+                top1_a.val, top1_a.avg, top5_a.val, top5_a.avg,
+                top1_b.val, top1_b.avg, top5_b.val, top5_b.avg,
+                batch_preds)
+            print_and_save(to_print, log_file)
+            
+        print_and_save('{} Results: Loss {:.3f}, Top1_a {:.3f}, Top5_a {:.3f}, Top1_b {:.3f}, Top5_b {:.3f}'.format(dataset, losses.avg, top1_a.avg, top5_a.avg, top1_b.avg, top5_b.avg), log_file)
+    return (top1_a.avg, top1_b.avg), (outputs_a, outputs_b)
 
 def validate_lstm_attn(model, criterion, test_iterator, cur_epoch, dataset, log_file, args):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
@@ -169,6 +220,12 @@ def main():
     
     output_dir = os.path.dirname(args.ckpt_path)
     log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
+    if args.double_output and args.logging:
+        if 'verb' in args.ckpt_path:
+            log_file = os.path.join(output_dir, "results-accuracy-validation-verb.txt")
+        if 'noun' in args.ckpt_path:
+            log_file = os.path.join(output_dir, "results-accuracy-validation-noun.txt")
+    
     print_and_save(args, log_file)
     cudnn.benchmark = True
         
@@ -222,32 +279,18 @@ def main():
     
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
 
-    validate = validate_lstm_attn if args.lstm_attn else validate_lstm
+    validate = validate_lstm_attn if args.lstm_attn else validate_lstm_do if args.double_output else validate_lstm
     top1, outputs = validate(model_ft, ce_loss, dataset_iterator, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file, args)
 
-    video_preds = [x[0] for x in outputs]
-    video_labels = [x[1] for x in outputs]
-
-    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
-
-    print_and_save(cf, log_file)
-    
-    if args.annotations_path:
-        valid_verb_indices, verb_ids_sorted, _, _= get_classes(args.annotations_path, args.val_list, 100)
-        all_verb_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
-        ave_pre_verbs, ave_rec_verbs, _ = avg_rec_prec_trimmed(video_preds, video_labels, valid_verb_indices, all_verb_indices)
-        print_and_save("Verbs > 100 instances at training:", log_file)
-        print_and_save("Classes are {}".format(valid_verb_indices), log_file)
-        print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre_verbs, ave_rec_verbs), log_file)
-        print_and_save("Most common verbs in training", log_file)
-        print_and_save("15 verbs rec {}".format(recall[verb_ids_sorted[:15]]), log_file)
-        print_and_save("15 verbs pre {}".format(precision[verb_ids_sorted[:15]]), log_file)
-        
-    print_and_save("Cls Rec {}".format(recall), log_file)
-    print_and_save("Cls Pre {}".format(precision), log_file)
-    print_and_save("Cls Acc {}".format(cls_acc), log_file)
-    print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
-    print_and_save("Dataset Acc {}".format(top1_acc), log_file)
+    if not isinstance(top1, tuple):
+        video_preds = [x[0] for x in outputs]
+        video_labels = [x[1] for x in outputs]        
+        mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", args.annotations_path, args.val_list, log_file)
+    else:
+        video_preds_a, video_preds_b = [x[0] for x in outputs[0]], [x[0] for x in outputs[1]]
+        video_labels_a, video_labels_b = [x[1] for x in outputs[0]], [x[1] for x in outputs[1]]
+        mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", args.annotations_path, args.val_list, log_file)
+        mean_cls_acc_b, top1_acc_b = eval_final_print(video_preds_b, video_labels_b, "Nouns", args.annotations_path, args.val_list, log_file)
 
 if __name__ == '__main__':
     main()

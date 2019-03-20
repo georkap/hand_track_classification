@@ -11,6 +11,7 @@ import os
 import pandas
 import numpy as np
 from sklearn.metrics import confusion_matrix
+from utils.file_utils import print_and_save
 
 def init_annot_and_splits(annotations_file):
     # init annotation file and splits
@@ -137,3 +138,32 @@ def avg_rec_prec_trimmed(pred, labels, valid_class_indices, all_class_indices):
     recall, precision = rec_prec_per_class(cm_trimmed_rows)
     
     return np.sum(precision)/len(precision), np.sum(recall)/len(recall), cm_trimmed_rows.astype(int)
+
+def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_list, log_file):
+    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
+    print_and_save(cls_type, log_file)
+    print_and_save(cf, log_file)
+    
+    if annotations_path:
+        valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path, val_list, 100)
+        if cls_type == 'Verbs':
+            valid_indices, ids_sorted = valid_verb_indices, verb_ids_sorted  
+            all_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
+        else:
+            valid_indices, ids_sorted = valid_noun_indices, noun_ids_sorted
+            all_indices = list(range(int(352)))
+        
+        ave_pre, ave_rec, _ = avg_rec_prec_trimmed(video_preds, video_labels, valid_indices, all_indices)
+        print_and_save("{} > 100 instances at training:".format(cls_type), log_file)
+        print_and_save("Classes are {}".format(valid_indices), log_file)
+        print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre, ave_rec), log_file)
+        print_and_save("Most common {} in training".format(cls_type), log_file)
+        print_and_save("15 {} rec {}".format(cls_type, recall[ids_sorted[:15]]), log_file)
+        print_and_save("15 {} pre {}".format(cls_type, precision[ids_sorted[:15]]), log_file)
+    
+    print_and_save("Cls Rec {}".format(recall), log_file)
+    print_and_save("Cls Pre {}".format(precision), log_file)
+    print_and_save("Cls Acc {}".format(cls_acc), log_file)
+    print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
+    print_and_save("Dataset Acc {}".format(top1_acc), log_file)
+    return mean_cls_acc, top1_acc

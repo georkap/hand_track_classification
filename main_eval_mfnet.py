@@ -20,7 +20,7 @@ from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 from utils.dataset_loader import VideoDatasetLoader
 from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize
-from utils.calc_utils import AverageMeter, accuracy, analyze_preds_labels
+from utils.calc_utils import AverageMeter, accuracy, eval_final_print
 from utils.video_sampler import RandomSampling
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
@@ -159,17 +159,18 @@ def main():
 
         top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
+
         if not isinstance(top1, tuple):
             video_preds = [x[0] for x in outputs]
-            video_labels = [x[1] for x in outputs]
-            mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", log_file)
+            video_labels = [x[1] for x in outputs]        
+            mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", args.annotations_path, args.val_list, log_file)
             overall_mean_cls_acc += mean_cls_acc
             overall_top1 += top1_acc
         else:
             video_preds_a, video_preds_b = [x[0] for x in outputs[0]], [x[0] for x in outputs[1]]
             video_labels_a, video_labels_b = [x[1] for x in outputs[0]], [x[1] for x in outputs[1]]
-            mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", log_file)
-            mean_cls_acc_b, top1_acc_b = eval_final_print(video_preds_b, video_labels_b, "Nouns", log_file)
+            mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", args.annotations_path, args.val_list, log_file)
+            mean_cls_acc_b, top1_acc_b = eval_final_print(video_preds_b, video_labels_b, "Nouns", args.annotations_path, args.val_list, log_file)
             overall_mean_cls_acc = (overall_mean_cls_acc[0] + mean_cls_acc_a, overall_mean_cls_acc[1] + mean_cls_acc_b)
             overall_top1 = (overall_top1[0] + top1_acc_a, overall_top1[1] + top1_acc_b)
         
@@ -180,17 +181,6 @@ def main():
     else:
         print_and_save("Mean Cls Acc a {}, b {}".format(overall_mean_cls_acc[0]/args.mfnet_eval, overall_mean_cls_acc[1]/args.mfnet_eval), log_file)
         print_and_save("Dataset Acc ({} times) a {}, b {}".format(args.mfnet_eval, overall_top1[0]/args.mfnet_eval, overall_top1[1]/args.mfnet_eval), log_file)
-
-def eval_final_print(video_preds, video_labels, cls_type, log_file):
-    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
-    print_and_save(cls_type, log_file)
-    print_and_save(cf, log_file)
-    print_and_save("Cls Rec {}".format(recall), log_file)
-    print_and_save("Cls Pre {}".format(precision), log_file)
-    print_and_save("Cls Acc {}".format(cls_acc), log_file)
-    print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
-    print_and_save("Dataset Acc {}".format(top1_acc), log_file)
-    return mean_cls_acc, top1_acc
 
 if __name__ == '__main__':
     main()
