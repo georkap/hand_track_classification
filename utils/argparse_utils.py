@@ -22,7 +22,8 @@ def make_base_parser(val):
         parser.add_argument('ckpt_path', type=str)
         parser.add_argument('val_list', type=str)
         parser.add_argument('--annotations_path', type=str, default=None)
-    parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
+    parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', 
+                        choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
     parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
@@ -113,7 +114,7 @@ def parse_args_training(parser):
 def parse_args_program(parser):
     # Program parameters
     parser.add_argument('--gpus', nargs='+', type=int, default=[0, 1])
-    parser.add_argument('--num_workers', type=int, default=8)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--eval_freq', type=int, default=1)
     parser.add_argument('--mfnet_eval', type=int, default=1)
     parser.add_argument('--eval_on_train', default=False, action='store_true')

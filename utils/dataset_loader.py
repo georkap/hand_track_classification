@@ -55,9 +55,8 @@ def load_two_pickle(tracks_path, secondary_prefix):
     obj_path = secondary_prefix
     for p in tracks_path.split('\\')[1:]:
         obj_path = os.path.join(obj_path, p)
-    with open(obj_path, 'rb') as f:
-        objects = pickle.load(f)
-    return load_pickle(tracks_path), objects
+        
+    return load_pickle(tracks_path), load_pickle(obj_path)
 
 
 def prepare_sampler(sampler_type, clip_length, frame_interval):
@@ -212,10 +211,13 @@ class PointPolarDatasetLoaderMultiSec(torch.utils.data.Dataset):
             right_track = np.array(hand_tracks['right'], dtype=np.float32)
 
 def object_list_to_bpv(detections, num_noun_classes, max_seq_length):
+    sampled_detections = np.array(detections)
     if max_seq_length != 0:
-        sampled_detections = np.array(detections)
         sampled_detections = sampled_detections[np.linspace(0, len(detections), max_seq_length, endpoint=False, dtype=int)].tolist()
-    bpv = np.zeros((max_seq_length, num_noun_classes), dtype=np.float32)
+        seq_length = max_seq_length
+    else:
+        seq_length = len(detections)
+    bpv = np.zeros((seq_length, num_noun_classes), dtype=np.float32)
     for i, dets in enumerate(sampled_detections):
         for obj in dets:
             bpv[i, obj] = 1
