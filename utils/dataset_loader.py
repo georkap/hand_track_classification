@@ -401,16 +401,28 @@ class PointObjDatasetLoader(torch.utils.data.Dataset):
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, classes, name_parts[-2] + "\\" + name_parts[-1]
 
+def make_data_arr(samples_list, bpv_prefix=None):
+    if bpv_prefix:
+        data_arr = [load_two_pickle(samples_list[index].data_path, bpv_prefix) for index in range(len(samples_list))]
+    else:
+        data_arr = [load_pickle(samples_list[index].data_path) for index in range(len(samples_list))]
+    return data_arr
+        
+
 class PointBpvDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length, double_output,
-                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False):
+                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False, dataarr=None):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
         self.double_output = double_output
         self.max_seq_length = max_seq_length
-        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, bpv_prefix) for index in range(len(self.samples_list))]
+        
+        if not dataarr:
+            self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
+        else:
+            self.data_arr = dataarr
     
     def __len__(self):
         return len(self.samples_list)
@@ -459,7 +471,7 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.only_left = only_left
         self.only_right = only_right
         
-        self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
+        self.data_arr = make_data_arr(self.samples_list, None)
           
     def __len__(self):
         return len(self.samples_list)
