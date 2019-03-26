@@ -72,12 +72,18 @@ def main():
             manager_test = multiprocessing.Manager()
             ns_test = manager_test.Namespace()
             ns_test.data_arr = data_arr_test
+            train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
+                                                 args.double_output, norm_val=norm_val,
+                                                 bpv_prefix=args.bpv_prefix, data_arr=ns_train.data_arr)
+            test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
+                                                args.double_output, norm_val=norm_val,
+                                                bpv_prefix=args.bpv_prefix, data_arr=ns_test.data_arr)
         train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
                                              args.double_output, norm_val=norm_val,
-                                             bpv_prefix=args.bpv_prefix, data_arr=ns_train.data_arr)
+                                             bpv_prefix=args.bpv_prefix)
         test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
                                             args.double_output, norm_val=norm_val,
-                                            bpv_prefix=args.bpv_prefix, data_arr=ns_test.data_arr)
+                                            bpv_prefix=args.bpv_prefix)
     elif args.lstm_feature == "coords_objects":
         train_loader = PointObjDatasetLoader(args.train_list, args.lstm_seq_size,
                                              args.double_output, norm_val=norm_val,
