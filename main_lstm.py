@@ -61,29 +61,29 @@ def main():
                                                      num_classes=args.verb_classes,
                                                      dual=args.lstm_dual)
     elif args.lstm_feature == "coords_bpv":
-        if args.num_workers > 0:
-            from utils.dataset_loader import make_data_arr, parse_samples_list
-            data_arr_train = make_data_arr(parse_samples_list(args.train_list), args.bpv_prefix)
-            data_arr_test = make_data_arr(parse_samples_list(args.test_list), args.bpv_prefix)
-            import multiprocessing
-            manager_train = multiprocessing.Manager()
-            data_train = manager_train.list(data_arr_train)
-            manager_test = multiprocessing.Manager()
-            data_test = manager_test.list(data_arr_test)
-            
-            train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
-                                                 args.double_output, norm_val=norm_val,
-                                                 bpv_prefix=args.bpv_prefix, data_arr=data_train)
-            test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
-                                                args.double_output, norm_val=norm_val,
-                                                bpv_prefix=args.bpv_prefix, data_arr=data_test)
-        else:
-            train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
-                                                 args.double_output, norm_val=norm_val,
-                                                 bpv_prefix=args.bpv_prefix)
-            test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
-                                                args.double_output, norm_val=norm_val,
-                                                bpv_prefix=args.bpv_prefix)
+#        if args.num_workers > 0:
+#            from utils.dataset_loader import make_data_arr, parse_samples_list
+#            data_arr_train = make_data_arr(parse_samples_list(args.train_list), args.bpv_prefix)
+#            data_arr_test = make_data_arr(parse_samples_list(args.test_list), args.bpv_prefix)
+#            import multiprocessing
+#            manager_train = multiprocessing.Manager()
+#            data_train = manager_train.list(data_arr_train)
+#            manager_test = multiprocessing.Manager()
+#            data_test = manager_test.list(data_arr_test)
+#            
+#            train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
+#                                                 args.double_output, norm_val=norm_val,
+#                                                 bpv_prefix=args.bpv_prefix, data_arr=data_train)
+#            test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
+#                                                args.double_output, norm_val=norm_val,
+#                                                bpv_prefix=args.bpv_prefix, data_arr=data_test)
+#        else:
+        train_loader = PointBpvDatasetLoader(args.train_list, args.lstm_seq_size,
+                                             args.double_output, norm_val=norm_val,
+                                             bpv_prefix=args.bpv_prefix, num_workers=args.num_workers)
+        test_loader = PointBpvDatasetLoader(args.test_list, args.lstm_seq_size,
+                                            args.double_output, norm_val=norm_val,
+                                            bpv_prefix=args.bpv_prefix, num_workers=args.num_workers)
     elif args.lstm_feature == "coords_objects":
         train_loader = PointObjDatasetLoader(args.train_list, args.lstm_seq_size,
                                              args.double_output, norm_val=norm_val,

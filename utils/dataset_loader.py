@@ -411,24 +411,33 @@ def make_data_arr(samples_list, bpv_prefix=None):
 
 class PointBpvDatasetLoader(torch.utils.data.Dataset):
     def __init__(self, list_file, max_seq_length, double_output,
-                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False, data_arr=None):
+                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False, num_workers=0):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
         self.double_output = double_output
         self.max_seq_length = max_seq_length
+        self.bpv_prefix = bpv_prefix
         
-        if not data_arr:
+#        if not data_arr:
+#            self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
+#        else:
+#            self.data_arr = data_arr
+        if num_workers == 0:
             self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
         else:
-            self.data_arr = data_arr
+            self.data_arr = None
     
     def __len__(self):
         return len(self.samples_list)
     
     def __getitem__(self, index):
-        hand_tracks, object_detections = self.data_arr[index]
+        if self.data_arr is not None:
+            hand_tracks, object_detections = self.data_arr[index]
+        else:
+            hand_tracks, object_detections = load_two_pickle(self.samples_list[index].data_path, 
+                                                             self.bpv_prefix)
         left_track, right_track = load_left_right_tracks(hand_tracks, self.max_seq_length)
         
         left_track /= self.norm_val[:2]
