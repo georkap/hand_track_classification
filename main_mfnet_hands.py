@@ -44,7 +44,8 @@ def calc_coord_loss(coords, heatmaps, target_var):
 
 def train_mfnet_h(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, gpus,
               lr_scheduler=None):
-    batch_time, losses, c_losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    batch_time, losses, cls_losses, c_losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(),\
+                                                           AverageMeter(), AverageMeter()
     model.train()
 
     if not isinstance(lr_scheduler, CyclicLR):
@@ -75,15 +76,16 @@ def train_mfnet_h(model, optimizer, criterion, train_iterator, mixup_alpha, cur_
         t1, t5 = accuracy(output.detach().cpu(), target_class.cpu(), topk=(1, 5))
         top1.update(t1.item(), output.size(0))
         top5.update(t5.item(), output.size(0))
+        cls_losses.update(cls_loss.item(), output.size(0))
         c_losses.update(coord_loss.item(), output.size(0))
         losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
         print_and_save(
-            '[Epoch:{}, Batch {}/{} in {:.3f} s][Loss(f) {:.4f}-(c) {:.4f}[avg(full):{:.4f}-(coords){:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
-                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, c_losses.val, losses.avg, c_losses.avg, top1.val, top1.avg,
-                top5.val, top5.avg,
-                lr_scheduler.get_lr()[0]), log_file)
+            '[Epoch:{}, Batch {}/{} in {:.3f} s][Loss(f|cls|coo) {:.4f} | {:.4f} | {:.4f} [avg:{:.4f} | {:.4f} | {:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, cls_losses.val, c_losses.val,
+                losses.avg, cls_losses.avg, c_losses.avg, top1.val, top1.avg, top5.val, top5.avg, lr_scheduler.get_lr()[0]),
+            log_file)
 
 
 def test_mfnet_h(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
