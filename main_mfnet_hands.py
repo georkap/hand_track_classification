@@ -7,10 +7,6 @@ main mfnet that classifies activities and predicts hand locations
 @author: Γιώργος
 """
 
-# TODO: make these consistent in the split files (recreate the POINT SPLIT files) in the following format
-# line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb, noun, uid, start_frame)
-# 2) CHECK THE DATALOADER CLASSES for consistency with these changes
-
 import time
 import torch, dsntnn
 import torch.backends.cudnn as cudnn

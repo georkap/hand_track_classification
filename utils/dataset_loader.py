@@ -607,8 +607,9 @@ class VideoAndPointDatasetLoader(torchDataset):
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
         assert (self.video_list[index].num_frames + 1 == len(left_track)) # add + 1 because in the epic annotations the last frame is inclusive
 
-        left_track = left_track[sampled_idxs]  # keep the points for the sampled frames
-        right_track = right_track[sampled_idxs]
+        idxs = (np.array(sampled_idxs) - start_frame).astype(np.int)
+        left_track = left_track[idxs]  # keep the points for the sampled frames
+        right_track = right_track[idxs]
         left_track = left_track[::2]  # keep 1 coordinate pair for every two frames
         right_track = right_track[::2]
 
@@ -730,7 +731,7 @@ class PointImageDatasetLoader(torchDataset):
         return point_imgs[:256, :, :], seq_size, self.samples_list[index].label_verb
 
 if __name__=='__main__':
-    video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_nd\epic_rgb_train_1.txt"
+    video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd\epic_rgb_train_1.txt"
     point_list_prefix = 'hand_detection_tracks'
     val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=0)
     loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=125, img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.])
