@@ -7,16 +7,12 @@ main mfnet that classifies activities and predicts hand locations
 @author: Γιώργος
 """
 
-SOME CHANGES TO BE DONE BEFORE RUNNING THIS PROJECT
-# 1) In the dataloader Dataline is parsing two different files for points and videos
-# - for points self.data[1] is start frame
-# - for videos self.data[1] is num frames and self.data[5] is start frame
-#TODO: make these consistent in the split files (recreate the POINT SPLIT files) in the following format
+# TODO: make these consistent in the split files (recreate the POINT SPLIT files) in the following format
 # line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb, noun, uid, start_frame)
 # 2) CHECK THE DATALOADER CLASSES for consistency with these changes
 
 import time
-import torch
+import torch, dsntnn
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
@@ -24,124 +20,155 @@ from models.mfnet_3d_hands import MFNET_3D
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_checkpoints, init_folders
 from utils.dataset_loader import VideoAndPointDatasetLoader, prepare_sampler
-from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
+from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, \
+    Resize, CenterCrop
 from utils.train_utils import load_lr_scheduler, CyclicLR
 from utils.calc_utils import AverageMeter, accuracy
 
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
-def train_cnn(model, optimizer, criterion, criterion2, train_iterator, mixup_alpha, cur_epoch, log_file, gpus, lr_scheduler=None):
-    batch_time, losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+def calc_coord_loss(coords, heatmaps, target_var):
+    # Per-location euclidean losses
+    euc_losses = dsntnn.euclidean_losses(coords, target_var)  # shape:[B, D, L, 2] batch, depth, locations, feature
+    # Per-location regularization losses
+
+    reg_losses = []
+    for i in range(heatmaps.shape[1]):
+        hms = heatmaps[:, 1]
+        target = target_var[:, 1]
+        reg_loss = dsntnn.js_reg_losses(hms, target, sigma_t=1.0)
+        reg_losses.append(reg_loss.unsqueeze_(1))
+    reg_losses = torch.stack(reg_losses, 1)
+    # reg_losses = dsntnn.js_reg_losses(heatmaps, target_var, sigma_t=1.0) # shape: [B, D, L, 7, 7]
+    # Combine losses into an overall loss
+    coord_loss = dsntnn.average_loss(euc_losses + reg_losses)
+    return coord_loss
+
+
+def train_mfnet_h(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, gpus,
+              lr_scheduler=None):
+    batch_time, losses, c_losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
     model.train()
-    
+
     if not isinstance(lr_scheduler, CyclicLR):
         lr_scheduler.step()
-    
+
     print_and_save('*********', log_file)
     print_and_save('Beginning of epoch: {}'.format(cur_epoch), log_file)
     t0 = time.time()
-    for batch_idx, (inputs, targets) in enumerate(train_iterator):
+    for batch_idx, (inputs, targets, points) in enumerate(train_iterator): # left_track.shape = [batch, 8, 2]
         if isinstance(lr_scheduler, CyclicLR):
             lr_scheduler.step()
-            
+
         inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
-        target_class = torch.tensor(targets[0]).cuda(gpus[0])
-        target_left = torch.tensor(targets[1]).cuda(gpus[0])
-        target_right = torch.tensor(targets[2]).cuda(gpus[0])
-        
-        output, left, right = model(inputs)
+        target_class = torch.tensor(targets).cuda(gpus[0])
+        target_var = torch.tensor(points).cuda(gpus[0])
+
+        output, coords, heatmaps = model(inputs)
 
         cls_loss = criterion(output, target_class)
-        left_loss = criterion2(left, target_left)
-        right_loss = criterion2(right, target_right)
-        loss = cls_loss + left_loss + right_loss
-        
+        coord_loss = calc_coord_loss(coords, heatmaps, target_var)
+        loss = cls_loss + coord_loss
+
         optimizer.zero_grad()
         loss.backward()
-                
+
         optimizer.step()
 
-        t1, t5 = accuracy(output.detach().cpu(), target_class.cpu(), topk=(1,5))
+        t1, t5 = accuracy(output.detach().cpu(), target_class.cpu(), topk=(1, 5))
         top1.update(t1.item(), output.size(0))
         top5.update(t5.item(), output.size(0))
+        c_losses.update(coord_loss.item(), output.size(0))
         losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
-        print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
-                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+        print_and_save(
+            '[Epoch:{}, Batch {}/{} in {:.3f} s][Loss(f) {:.4f}-(c) {:.4f}[avg(full):{:.4f}-(coords){:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, c_losses.val, losses.avg, c_losses.avg, top1.val, top1.avg,
+                top5.val, top5.avg,
                 lr_scheduler.get_lr()[0]), log_file)
 
-def test_cnn(model, criterion, criterion2, test_iterator, cur_epoch, dataset, log_file, gpus):
+
+def test_mfnet_h(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
     with torch.no_grad():
         model.eval()
         print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
-        for batch_idx, (inputs, targets) in enumerate(test_iterator):
+        for batch_idx, (inputs, targets, points) in enumerate(test_iterator):
             inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
-            target_class = torch.tensor(targets[0]).cuda(gpus[0])
-            target_left = torch.tensor(targets[1]).cuda(gpus[0])
-            target_right = torch.tensor(targets[2]).cuda(gpus[0])
+            target_class = torch.tensor(targets).cuda(gpus[0])
+            target_var = torch.tensor(points).cuda(gpus[0])
 
-            output, left, right = model(inputs)
+            output, coords, heatmaps = model(inputs)
+
             cls_loss = criterion(output, target_class)
-            left_loss = criterion2(left, target_left)
-            right_loss = criterion2(right, target_right)
-            loss = cls_loss + left_loss + right_loss
+            coord_loss = calc_coord_loss(coords, heatmaps, target_var)
+            loss = cls_loss + coord_loss
 
-            t1, t5 = accuracy(output.detach().cpu(), target_class.detach().cpu(), topk=(1,5))
+            t1, t5 = accuracy(output.detach().cpu(), target_class.detach().cpu(), topk=(1, 5))
             top1.update(t1.item(), output.size(0))
             top5.update(t5.item(), output.size(0))
             losses.update(loss.item(), output.size(0))
 
             print_and_save('[Epoch:{}, Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]'.format(
-                    cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
+                cur_epoch, batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg), log_file)
 
-        print_and_save('{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg), log_file)
+        print_and_save(
+            '{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg),
+            log_file)
     return top1.avg
+
 
 def main():
     args, model_name = parse_args('mfnet', val=False)
-    
+
     output_dir, log_file = init_folders(args.base_output_dir, model_name, args.resume, args.logging)
     print_and_save(args, log_file)
-    print_and_save("Model name: {}".format(model_name), log_file)    
+    print_and_save("Model name: {}".format(model_name), log_file)
     cudnn.benchmark = True
 
-    model_ft = MFNET_3D(args.verb_classes, dropout=args.dropout)
+    model_ft = MFNET_3D(args.verb_classes, 2, dropout=args.dropout)
     if args.pretrained:
         checkpoint = torch.load(args.pretrained_model_path)
         # below line is needed if network is trained with DataParallel
-        base_dict = {'.'.join(k.split('.')[1:]): v for k,v in list(checkpoint['state_dict'].items())}
-        base_dict = {k:v for k, v in list(base_dict.items()) if 'classifier' not in k}
-        model_ft.load_state_dict(base_dict, strict=False) #model.load_state_dict(checkpoint['state_dict'])
+        base_dict = {'.'.join(k.split('.')[1:]): v for k, v in list(checkpoint['state_dict'].items())}
+        base_dict = {k: v for k, v in list(base_dict.items()) if 'classifier' not in k}
+        model_ft.load_state_dict(base_dict, strict=False)  # model.load_state_dict(checkpoint['state_dict'])
     model_ft.cuda(device=args.gpus[0])
     model_ft = torch.nn.DataParallel(model_ft, device_ids=args.gpus, output_device=args.gpus[0])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
 
-    # load dataset and train and validation iterators
+    # load train-val sampler
     train_sampler = prepare_sampler("train", args.clip_length, args.frame_interval)
+    test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
+
+    # load train-val transforms
     train_transforms = transforms.Compose([
-            RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
-            RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
-            ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list, 
-                                      num_classes=args.verb_classes, 
-                                      batch_transform=train_transforms,
-                                      img_tmpl='frame_{:010d}.jpg',
-                                      norm_val=[456., 256., 456., 256.])
+        RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288]),
+        RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
+        ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+    test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
+                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+
+    # make train-val dataset loaders
+    train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list,
+                                              num_classes=args.verb_classes,
+                                              point_list_prefix=args.bpv_prefix,
+                                              batch_transform=train_transforms,
+                                              img_tmpl='frame_{:010d}.jpg',
+                                              norm_val=[456., 256., 456., 256.])
+    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list,
+                                             num_classes=args.verb_classes,
+                                             point_list_prefix=args.bpv_prefix,
+                                             batch_transform=test_transforms,
+                                             img_tmpl='frame_{:010d}.jpg',
+                                             norm_val=[456., 256., 456., 256.])
+
+    # make train-val iterators
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
-    
-    test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
-    test_transforms=transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-                                        ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list, 
-                                     num_classes=args.verb_classes,
-                                     batch_transform=test_transforms,
-                                     img_tmpl='frame_{:010d}.jpg',
-                                     norm_val=[456., 256., 456., 256.])
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
@@ -171,19 +198,23 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
 
     ce_loss = torch.nn.CrossEntropyLoss().cuda(device=args.gpus[0])
-    mse_loss = torch.nn.MSELoss().cuda(device=args.gpus[0])
+    # mse_loss = torch.nn.MSELoss().cuda(device=args.gpus[0])
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
     new_top1, top1 = 0.0, 0.0
+    train = train_mfnet_h
+    test = test_mfnet_h
     for epoch in range(args.max_epochs):
-        train_cnn(model_ft, optimizer, ce_loss, mse_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus, lr_scheduler)
-        if (epoch+1) % args.eval_freq == 0:
+        train(model_ft, optimizer, ce_loss, train_iterator, args.mixup_a, epoch, log_file, args.gpus,
+                  lr_scheduler)
+        if (epoch + 1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test_cnn(model_ft, ce_loss, mse_loss, train_iterator, epoch, "Train", log_file, args.gpus)
-            new_top1 = test_cnn(model_ft, ce_loss, mse_loss, test_iterator, epoch, "Test", log_file, args.gpus)
+                test(model_ft, ce_loss, train_iterator, epoch, "Train", log_file, args.gpus)
+            new_top1 = test(model_ft, ce_loss, test_iterator, epoch, "Test", log_file, args.gpus)
             top1 = save_checkpoints(model_ft, optimizer, top1, new_top1,
                                     args.save_all_weights, output_dir, model_name, epoch,
                                     log_file)
-            
+
+
 if __name__ == '__main__':
     main()

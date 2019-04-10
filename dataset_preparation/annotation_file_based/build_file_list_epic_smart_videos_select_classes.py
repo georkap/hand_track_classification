@@ -14,8 +14,12 @@ import pandas
 
 get_track_class = lambda x: int(x.split('_')[1])
 
-#selected_classes = [5,6]
-selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
+
+# selected_classes = None
+selected_classes = [5,6]
+# selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
+
+nd = True
 
 bad_uids = [126, 961, 5099, 12599, 21740, 25710, 26811, 28585, 33647, 37431]
 unavailable = [9, 11, 18]
@@ -30,8 +34,11 @@ for i in range(28):
 split_dicts = [split_1, split_2, split_3, split_4]
 
 BASE_DIR = r"frames_rgb_flow\rgb\train"
-SPLITS_DIR = r"..\splits\epic_rgb"
-#SPLITS_DIR = r"..\splits\epic_rgb_select24"
+# SPLITS_DIR = r"..\..\splits\epic_rgb"
+# SPLITS_DIR = r"..\..\splits\epic_rgb_select24"
+SPLITS_DIR = r"..\..\splits\epic_rgb_select2_56"
+if nd:
+    SPLITS_DIR += '_nd'
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
 train_names = [os.path.join(SPLITS_DIR, "epic_rgb_train_{}.txt".format(i)) for i in range(1,5)]
@@ -50,12 +57,13 @@ for index, row in annotations.iterrows():
     stop_frame = row.stop_frame
     num_frames = stop_frame - start_frame
     verb_class = row.verb_class
-#    if verb_class not in selected_classes:
-#        continue
+    if selected_classes:
+       if verb_class not in selected_classes:
+           continue
     noun_class = row.noun_class
     pid = row.participant_id
     uid = row.uid
-    if uid in bad_uids:
+    if nd and uid in bad_uids:
         continue
     videoid = row.video_id
     action_dir = os.path.join(BASE_DIR, pid, videoid)

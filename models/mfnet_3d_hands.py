@@ -12,9 +12,31 @@ import os
 from collections import OrderedDict
 
 import torch.nn as nn
+import dsntnn
 
 from utils import initializer
 
+
+class CoordRegressionLayer(nn.Module):
+    def __init__(self, input_filters, n_locations):
+        super().__init__()
+        self.hm_conv = nn.Conv3d(input_filters, n_locations, kernel_size=1, bias=False)
+
+    def forward(self, h):
+        # 1. Use a 1x1 conv to get one unnormalized heatmap per location
+        unnormalized_heatmaps = self.hm_conv(h)
+        # 2. Transpose the heatmap volume to keep the temporal dimension in the volume
+        unnormalized_heatmaps.transpose_(2, 1).transpose_(1, 0)
+        # 3. Normalize the heatmaps
+        heatmaps = [dsntnn.flat_softmax(uhm) for uhm in unnormalized_heatmaps]
+#        heatmaps = dsntnn.flat_softmax(unnormalized_heatmaps)
+        # 4. Calculate the coordinates
+#        coords = dsntnn.dsnt(heatmaps)
+        coords = [dsntnn.dsnt   (hm) for hm in heatmaps]
+        heatmaps = torch.stack(heatmaps, 1)
+        coords = torch.stack(coords, 1)
+
+        return coords, heatmaps
 
 class BN_AC_CONV3D(nn.Module):
 
@@ -67,7 +89,7 @@ class MF_UNIT(nn.Module):
 
 class MFNET_3D(nn.Module):
 
-    def __init__(self, num_classes, dropout=None, pretrained=False, pretrained_model="", **kwargs):
+    def __init__(self, num_classes, num_coords, dropout=0, pretrained=False, pretrained_model="", **kwargs):
         super(MFNET_3D, self).__init__()
 
         groups = 16
@@ -139,28 +161,21 @@ class MFNET_3D(nn.Module):
                     ('relu', nn.ReLU(inplace=True))
                     ]))
         
-        if dropout:
-            self.globalpool = nn.Sequential(OrderedDict([
-                            ('avg', nn.AvgPool3d(kernel_size=(8,7,7), stride=(1,1,1))),
-                            ('dropout', nn.Dropout(p=dropout)),
-                            ]))
-            self.globalpool_hands = nn.Sequential(OrderedDict([
-                            ('avg', nn.AvgPool3d(kernel_size=(1,7,7), stride=(1,1,1))),
-                            ('dropout', nn.Dropout(p=dropout)),
-                            ]))
-        else:
-            self.globalpool = nn.Sequential(OrderedDict([
-                            ('avg', nn.AvgPool3d(kernel_size=(8,7,7),  stride=(1,1,1))),
-                            # ('dropout', nn.Dropout(p=0.5)), only for fine-tuning
-                            ]))
-            self.globalpool_hands = nn.Sequential(OrderedDict([
-                            ('avg', nn.AvgPool3d(kernel_size=(1,7,7),  stride=(1,1,1))),
-                            # ('dropout', nn.Dropout(p=0.5)), only for fine-tuning
-                            ]))
-        self.classifier = nn.Linear(conv5_num_out, num_classes)
-        self.left_hand = nn.Linear(conv5_num_out, 2 * 8)
-        self.right_hand = nn.Linear(conv5_num_out, 2 * 8)
+        
+        # create heatmaps
+        self.coord_layers = CoordRegressionLayer(conv5_num_out, num_coords)
+    
 
+        self.globalpool = nn.Sequential(OrderedDict([
+                        ('avg', nn.AvgPool3d(kernel_size=(8,7,7), stride=(1,1,1))),
+                        ('dropout', nn.Dropout(p=dropout)),
+                        ]))
+#        self.globalpool_hands = nn.Sequential(OrderedDict([
+#                        ('avg', nn.AvgPool3d(kernel_size=(1,7,7), stride=(1,1,1))),
+#                        ('dropout', nn.Dropout(p=dropout)),
+#                        ]))
+
+        self.classifier = nn.Linear(conv5_num_out, num_classes)
 
         #############
         # Initialization
@@ -189,24 +204,24 @@ class MFNET_3D(nn.Module):
         h = self.conv5(h)   #  x14 ->   x7
 
         h = self.tail(h)
-        hands = self.globalpool_hands(h)
+        coords, heatmaps = self.coord_layers(h)
+#        hands = self.globalpool_hands(h)
         h = self.globalpool(h)
 
-        hands = hands.view(hands.shape[0], -1)
+#        hands = hands.view(hands.shape[0], -1)
         h = h.view(h.shape[0], -1)
         
-        left_hands = self.left_hand(hands)
-        right_hands = self.right_hands(hands)
+
         h = self.classifier(h)
 
-        return h, left_hands, right_hands
+        return h, coords, heatmaps
 
 if __name__ == "__main__":
     import torch
     logging.getLogger().setLevel(logging.DEBUG)
     # ---------
-    net = MFNET_3D(num_classes=100, pretrained=False)
+    net = MFNET_3D(num_classes=100, num_coords=5, pretrained=False)
     data = torch.tensor(torch.randn(1,3,16,224,224))
     output = net(data)
 #    torch.save({'state_dict': net.state_dict()}, './tmp.pth')
-    print (output.shape)
+#    print (output.shape)

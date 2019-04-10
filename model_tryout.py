@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from utils.file_utils import print_and_save
-from utils.dataset_loader import make_angles, make_dists, load_pickle
+from utils.dataset_loader import calc_angles, calc_polar_distance_from_prev, load_pickle
 import cv2
 
 fr_width = 456
@@ -165,12 +165,12 @@ right_track = np.array(hand_tracks['right'], dtype=np.float32)
 
 left_track = left_track[np.linspace(0, len(left_track), 192, endpoint=False, dtype=int)]
 right_track = right_track[np.linspace(0, len(right_track), 192, endpoint=False, dtype=int)]
-left_angles = make_angles(left_track)
-right_angles = make_angles(right_track)
+left_angles = calc_angles(left_track)
+right_angles = calc_angles(right_track)
 left_track /= norm_val[:2]
 right_track /= norm_val[2:]
-left_dist = make_dists(left_track)
-right_dist = make_dists(right_track)
+left_dist = calc_polar_distance_from_prev(left_track)
+right_dist = calc_polar_distance_from_prev(right_track)
 points = np.concatenate((left_track,
                          left_dist[:, np.newaxis],
                          left_angles[:, np.newaxis],

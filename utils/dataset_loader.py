@@ -10,11 +10,14 @@ Image dataset loader for a .txt file with a sample per line in the format
 
 import os
 import pickle
+from typing import Optional, List, Any, Union, Tuple
+
 import cv2
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
-import torch.utils.data
+from torch.utils.data import Dataset as torchDataset
 from utils.video_sampler import RandomSampling, SequentialSampling
+
 
 def get_class_weights(list_file, num_classes, use_mapping):
     samples_list = parse_samples_list(list_file)
@@ -27,10 +30,11 @@ def get_class_weights(list_file, num_classes, use_mapping):
     else:
         for s in samples_list:
             counts[s.label_verb] += 1
-    
-    weights = 1/counts
-    weights = weights/np.sum(weights)
+
+    weights = 1 / counts
+    weights = weights / np.sum(weights)
     return weights.astype(np.float32)
+
 
 def make_class_mapping(samples_list):
     classes = []
@@ -43,20 +47,44 @@ def make_class_mapping(samples_list):
         mapping_dict[c] = i
     return mapping_dict
 
+
 def parse_samples_list(list_file):
     return [DataLine(x.strip().split(' ')) for x in open(list_file)]
 
+
 def load_pickle(tracks_path):
-    with open(tracks_path,'rb') as f:
+    with open(tracks_path, 'rb') as f:
         tracks = pickle.load(f)
     return tracks
 
-def load_two_pickle(tracks_path, secondary_prefix):
+
+def substitute_prefix(tracks_path, secondary_prefix):
     obj_path = secondary_prefix
     for p in tracks_path.split('\\')[1:]:
         obj_path = os.path.join(obj_path, p)
-        
+    return obj_path
+
+def load_two_pickle(tracks_path, secondary_prefix):
+    obj_path = substitute_prefix(tracks_path, secondary_prefix)
     return load_pickle(tracks_path), load_pickle(obj_path)
+
+
+def load_point_samples(samples_list, bpv_prefix=None):
+    if bpv_prefix:
+        data_arr = [load_two_pickle(samples_list[index].data_path, bpv_prefix) for index in range(len(samples_list))]
+    else:
+        data_arr = [load_pickle(samples_list[index].data_path) for index in range(len(samples_list))]
+    return data_arr
+
+
+def load_images(data_path, frame_indices, image_tmpl):
+    images = []
+    for f_ind in frame_indices:
+        im_name = os.path.join(data_path, image_tmpl.format(f_ind))
+        next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
+        next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
+        images.append(next_image)
+    return images
 
 
 def prepare_sampler(sampler_type, clip_length, frame_interval):
@@ -73,14 +101,58 @@ def prepare_sampler(sampler_type, clip_length, frame_interval):
         out_sampler = val_sampler
     return out_sampler
 
-def load_images(data_path, frame_indices, image_tmpl):
-    images = []
-    for f_ind in frame_indices:
-        im_name = os.path.join(data_path, image_tmpl.format(f_ind))
-        next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
-        next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
-        images.append(next_image)
-    return images
+
+def object_list_to_bpv(detections, num_noun_classes, max_seq_length):
+    sampled_detections = np.array(detections)
+    if max_seq_length != 0:
+        sampled_detections = sampled_detections[
+            np.linspace(0, len(detections), max_seq_length, endpoint=False, dtype=int)].tolist()
+        seq_length = max_seq_length
+    else:
+        seq_length = len(detections)
+    bpv = np.zeros((seq_length, num_noun_classes), dtype=np.float32)
+    for i, dets in enumerate(sampled_detections):
+        for obj in dets:
+            bpv[i, obj] = 1
+    return bpv
+
+
+def load_left_right_tracks(hand_tracks, max_seq_length):
+    left_track = np.array(hand_tracks['left'], dtype=np.float32)
+    right_track = np.array(hand_tracks['right'], dtype=np.float32)
+    if max_seq_length != 0:
+        left_track = left_track[np.linspace(0, len(left_track), max_seq_length, endpoint=False, dtype=int)]
+        right_track = right_track[np.linspace(0, len(right_track), max_seq_length, endpoint=False, dtype=int)]
+    return left_track, right_track
+
+
+def calc_distance_differences(track):
+    x2 = track[:, 0]
+    x1 = np.roll(x2, 1)
+    x1[0] = x1[1]
+    y2 = track[:, 1]
+    y1 = np.roll(y2, 1)
+    y1[0] = y1[1]
+    xdifs = x2 - x1
+    ydifs = y2 - y1
+    return np.concatenate((xdifs[:, np.newaxis], ydifs[:, np.newaxis]), -1)
+
+
+def calc_angles(track):
+    x2 = track[:, 0]
+    x1 = np.roll(x2, 1)
+    x1[0] = x1[1]
+    y2 = track[:, 1]
+    y1 = np.roll(y2, 1)
+    y1[0] = y1[1]
+    angles = np.arctan2(y2 * x1 - y1 * x2, x2 * x1 + y2 * y1, dtype=np.float32)
+    return angles
+
+
+def calc_polar_distance_from_prev(track):
+    return np.concatenate((np.array([0]),
+                           np.diagonal(squareform(pdist(track)), offset=-1)))
+
 
 class DataLine(object):
     def __init__(self, row):
@@ -91,7 +163,7 @@ class DataLine(object):
         return self.data[0]
 
     @property
-    def num_frames(self): # sto palio format ayto einai to start_frame
+    def num_frames(self):  # sto palio format ayto einai to start_frame
         return int(self.data[1])
 
     @property
@@ -101,19 +173,20 @@ class DataLine(object):
     @property
     def label_noun(self):
         return int(self.data[3])
-    
+
     @property
     def uid(self):
         return int(self.data[4] if len(self.data) > 4 else -1)
-    
+
     @property
     def start_frame(self):
         return int(self.data[5] if len(self.data) == 6 else -1)
 
-class ImageDatasetLoader(torch.utils.data.Dataset):
+
+class ImageDatasetLoader(torchDataset):
 
     def __init__(self, list_file, num_classes=120,
-                 batch_transform=None, channels='RGB', validation=False ):
+                 batch_transform=None, channels='RGB', validation=False):
         self.samples_list = parse_samples_list(list_file)
         if num_classes != 120:
             self.mapping = make_class_mapping(self.samples_list)
@@ -122,14 +195,14 @@ class ImageDatasetLoader(torch.utils.data.Dataset):
         self.transform = batch_transform
         self.channels = channels
         self.validation = validation
-        self.image_read_type = cv2.IMREAD_COLOR if channels=='RGB' else cv2.IMREAD_GRAYSCALE
+        self.image_read_type = cv2.IMREAD_COLOR if channels == 'RGB' else cv2.IMREAD_GRAYSCALE
 
     def __len__(self):
         return len(self.samples_list)
 
     def __getitem__(self, index):
         img = cv2.imread(self.samples_list[index].data_path, self.image_read_type).astype(np.float32)
-        if self.channels=='RGB':
+        if self.channels == 'RGB':
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
         if self.transform is not None:
@@ -146,14 +219,20 @@ class ImageDatasetLoader(torch.utils.data.Dataset):
             name_parts = self.samples_list[index].data_path.split("\\")
             return img, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
-class VideoDatasetLoader(torch.utils.data.Dataset):
 
-    def __init__(self, sampler, list_file, num_classes=120, 
+class VideoDatasetLoader(torchDataset):
+
+    def __init__(self, sampler, list_file, num_classes=120,
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(list_file)
 
-        verb_classes = num_classes if not isinstance(num_classes, tuple) else num_classes[0] # check for double output and pick first for verb classes
+        # check for double output and choose as first the verb classes
+        if not isinstance(num_classes, tuple):
+            verb_classes = num_classes
+        else:
+            verb_classes = num_classes[0]
+
         if verb_classes != 120:
             self.mapping = make_class_mapping(self.video_list)
         else:
@@ -167,7 +246,7 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         return len(self.video_list)
 
     def __getitem__(self, index):
-        frame_count=self.video_list[index].num_frames
+        frame_count = self.video_list[index].num_frames
         start_frame = self.video_list[index].start_frame
         start_frame = start_frame if start_frame != -1 else 0
         sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
@@ -179,12 +258,12 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
 
         if self.transform is not None:
             clip_input = self.transform(clip_input)
-            
+
         if self.mapping:
             verb_id = self.mapping[self.video_list[index].label_verb]
         else:
             verb_id = self.video_list[index].label_verb
-        if self.double_output:            
+        if self.double_output:
             noun_id = self.video_list[index].label_noun
             classes = (verb_id, noun_id)
         else:
@@ -195,14 +274,15 @@ class VideoDatasetLoader(torch.utils.data.Dataset):
         else:
             return clip_input, classes, self.video_list[index].data_path.split("\\")[-1]
 
-#TODO: this is for sliding window sample creation with a fixed sizes
-class PointPolarDatasetLoaderMultiSec(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+
+# TODO: this is for sliding window sample creation with a fixed sizes
+class PointPolarDatasetLoaderMultiSec(torchDataset):
+    def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
-        self.max_seq_length=max_seq_length
+        self.max_seq_length = max_seq_length
         self.validation = validation
         self.data_arr = []
         for index in range(len(self.samples_list)):
@@ -210,74 +290,35 @@ class PointPolarDatasetLoaderMultiSec(torch.utils.data.Dataset):
             left_track = np.array(hand_tracks['left'], dtype=np.float32)
             right_track = np.array(hand_tracks['right'], dtype=np.float32)
 
-def object_list_to_bpv(detections, num_noun_classes, max_seq_length):
-    sampled_detections = np.array(detections)
-    if max_seq_length != 0:
-        sampled_detections = sampled_detections[np.linspace(0, len(detections), max_seq_length, endpoint=False, dtype=int)].tolist()
-        seq_length = max_seq_length
-    else:
-        seq_length = len(detections)
-    bpv = np.zeros((seq_length, num_noun_classes), dtype=np.float32)
-    for i, dets in enumerate(sampled_detections):
-        for obj in dets:
-            bpv[i, obj] = 1
-    return bpv
-          
-def load_left_right_tracks(hand_tracks, max_seq_length):
-    left_track = np.array(hand_tracks['left'], dtype=np.float32)
-    right_track = np.array(hand_tracks['right'], dtype=np.float32)
-    if max_seq_length != 0:
-        left_track = left_track[np.linspace(0, len(left_track), max_seq_length, endpoint=False, dtype=int)]
-        right_track = right_track[np.linspace(0, len(right_track), max_seq_length, endpoint=False, dtype=int)]
-    return left_track, right_track
+    def __len__(self):
+        pass
 
-def make_diffs(track):
-    x2 = track[:,0]
-    x1 = np.roll(x2,1)
-    x1[0] = x1[1]
-    y2 = track[:,1]
-    y1 = np.roll(y2,1)
-    y1[0] = y1[1]
-    xdifs = x2-x1
-    ydifs = y2-y1
-    return np.concatenate((xdifs[:,np.newaxis],ydifs[:,np.newaxis]),-1)
+    def __getitem__(self, item):
+        pass
 
-def make_angles(track):
-    x2 = track[:,0]
-    x1 = np.roll(x2, 1)
-    x1[0] = x1[1]
-    y2 = track[:,1]
-    y1 = np.roll(y2, 1)
-    y1[0] = y1[1]
-    angles = np.arctan2(y2*x1-y1*x2, x2*x1+y2*y1, dtype=np.float32)
-    return angles
 
-def make_dists(track):
-    return np.concatenate((np.array([0]),
-                           np.diagonal(squareform(pdist(track)), offset=-1)))
-
-class PointDiffDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+class PointDiffDatasetLoader(torchDataset):
+    def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.norm_val = np.array(norm_val)
-        self.max_seq_length=max_seq_length
-        self.validation=validation
+        self.max_seq_length = max_seq_length
+        self.validation = validation
         self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
-        
+
     def __len__(self):
         return len(self.samples_list)
-    
+
     def __getitem__(self, index):
         left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
-        
+
         left_track /= self.norm_val[:2]
         right_track /= self.norm_val[2:]
-        
-        left_diffs = make_diffs(left_track)
-        right_diffs = make_diffs(right_track)
-        
-        points = np.concatenate((left_track, left_diffs, right_track, right_diffs),-1).astype(np.float32)
+
+        left_diffs = calc_distance_differences(left_track)
+        right_diffs = calc_distance_differences(right_track)
+
+        points = np.concatenate((left_track, left_diffs, right_track, right_diffs), -1).astype(np.float32)
         seq_size = len(points)
         class_id = self.samples_list[index].label_verb
         if not self.validation:
@@ -285,29 +326,29 @@ class PointDiffDatasetLoader(torch.utils.data.Dataset):
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
-        
 
-class AnglesDatasetLoader(torch.utils.data.Dataset):
+
+class AnglesDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length=None, validation=False):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
-        self.max_seq_length=max_seq_length
+        self.max_seq_length = max_seq_length
         self.validation = validation
         self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
-    
+
     def __len__(self):
         return len(self.samples_list)
 
-    def __getitem__(self,index):
+    def __getitem__(self, index):
         left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
-        
-        left_angles = make_angles(left_track)
-        right_angles = make_angles(right_track)    
+
+        left_angles = calc_angles(left_track)
+        right_angles = calc_angles(right_track)
 
         points = np.concatenate((left_angles[:, np.newaxis],
                                  right_angles[:, np.newaxis]), -1).astype(np.float32)
         seq_size = len(points)
-        
+
         class_id = self.samples_list[index].label_verb
         if not self.validation:
             return points, seq_size, class_id
@@ -316,33 +357,33 @@ class AnglesDatasetLoader(torch.utils.data.Dataset):
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 
-class PointPolarDatasetLoader(torch.utils.data.Dataset):
-        
-    def __init__(self, list_file, max_seq_length=None, norm_val=[1.,1.,1.,1.],
+class PointPolarDatasetLoader(torchDataset):
+
+    def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
-        self.max_seq_length=max_seq_length
+        self.max_seq_length = max_seq_length
         self.validation = validation
         self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
-        
+
     def __len__(self):
         return len(self.samples_list)
-    
-    def __getitem__(self,index):
+
+    def __getitem__(self, index):
         left_track, right_track = load_left_right_tracks(self.data_arr[index], self.max_seq_length)
-        
-        left_angles = make_angles(left_track)
-        right_angles = make_angles(right_track)
-        
+
+        left_angles = calc_angles(left_track)
+        right_angles = calc_angles(right_track)
+
         left_track /= self.norm_val[:2]
         right_track /= self.norm_val[2:]
-        
+
         left_dist = np.concatenate((np.array([0]),
-                                   np.diagonal(squareform(pdist(left_track)), offset=-1)))
-        right_dist= np.concatenate((np.array([0]),
-                                   np.diagonal(squareform(pdist(right_track)), offset=-1)))
+                                    np.diagonal(squareform(pdist(left_track)), offset=-1)))
+        right_dist = np.concatenate((np.array([0]),
+                                     np.diagonal(squareform(pdist(right_track)), offset=-1)))
 
         points = np.concatenate((left_track,
                                  left_dist[:, np.newaxis],
@@ -351,7 +392,7 @@ class PointPolarDatasetLoader(torch.utils.data.Dataset):
                                  right_dist[:, np.newaxis],
                                  right_angles[:, np.newaxis]), -1).astype(np.float32)
         seq_size = len(points)
-        
+
         class_id = self.samples_list[index].label_verb
         if not self.validation:
             return points, seq_size, class_id
@@ -359,59 +400,55 @@ class PointPolarDatasetLoader(torch.utils.data.Dataset):
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
-class PointObjDatasetLoader(torch.utils.data.Dataset):
+
+class PointObjDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length, double_output,
-                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False):
+                 norm_val=None, bpv_prefix='noun_bpv_oh', validation=False):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
         self.double_output = double_output
         self.max_seq_length = max_seq_length
-        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, bpv_prefix) for index in range(len(self.samples_list))]
-    
+        self.data_arr = [load_two_pickle(self.samples_list[index].data_path, bpv_prefix) for index in
+                         range(len(self.samples_list))]
+
     def __len__(self):
         return len(self.samples_list)
-    
+
     def __getitem__(self, index):
         hand_tracks, object_tracks = self.data_arr[index]
         left_track, right_track = load_left_right_tracks(hand_tracks, self.max_seq_length)
-        
+
         left_track /= self.norm_val[:2]
         right_track /= self.norm_val[2:]
-        
+
         if self.max_seq_length != 0:
-            object_tracks = object_tracks[np.linspace(0, len(object_tracks), self.max_seq_length, endpoint=False, dtype=int)]
+            object_tracks = object_tracks[
+                np.linspace(0, len(object_tracks), self.max_seq_length, endpoint=False, dtype=int)]
         object_tracks = object_tracks / np.tile(self.norm_val[:2], 352)
-        
+
         points = np.concatenate((left_track, right_track, object_tracks),
                                 -1).astype(np.float32)
         seq_size = len(points)
-        
+
         verb_id = self.samples_list[index].label_verb
-        if self.double_output:            
+        if self.double_output:
             noun_id = self.samples_list[index].label_noun
             classes = np.array([verb_id, noun_id], dtype=np.int64)
         else:
             classes = verb_id
-        
+
         if not self.validation:
             return points, seq_size, classes
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, classes, name_parts[-2] + "\\" + name_parts[-1]
 
-def make_data_arr(samples_list, bpv_prefix=None):
-    if bpv_prefix:
-        data_arr = [load_two_pickle(samples_list[index].data_path, bpv_prefix) for index in range(len(samples_list))]
-    else:
-        data_arr = [load_pickle(samples_list[index].data_path) for index in range(len(samples_list))]
-    return data_arr
-        
 
-class PointBpvDatasetLoader(torch.utils.data.Dataset):
+class PointBpvDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length, double_output,
-                 norm_val=[1.,1.,1.,1.], bpv_prefix='noun_bpv_oh', validation=False, num_workers=0):
+                 norm_val=None, bpv_prefix='noun_bpv_oh', validation=False, num_workers=0):
         self.samples_list = parse_samples_list(list_file)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
@@ -419,56 +456,57 @@ class PointBpvDatasetLoader(torch.utils.data.Dataset):
         self.double_output = double_output
         self.max_seq_length = max_seq_length
         self.bpv_prefix = bpv_prefix
-        
-#        if not data_arr:
-#            self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
-#        else:
-#            self.data_arr = data_arr
+
+        #        if not data_arr:
+        #            self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
+        #        else:
+        #            self.data_arr = data_arr
         if num_workers == 0:
-            self.data_arr = make_data_arr(self.samples_list, bpv_prefix)
+            self.data_arr = load_point_samples(self.samples_list, bpv_prefix)
         else:
             self.data_arr = None
-    
+
     def __len__(self):
         return len(self.samples_list)
-    
+
     def __getitem__(self, index):
         if self.data_arr is not None:
             hand_tracks, object_detections = self.data_arr[index]
         else:
-            hand_tracks, object_detections = load_two_pickle(self.samples_list[index].data_path, 
+            hand_tracks, object_detections = load_two_pickle(self.samples_list[index].data_path,
                                                              self.bpv_prefix)
         left_track, right_track = load_left_right_tracks(hand_tracks, self.max_seq_length)
-        
+
         left_track /= self.norm_val[:2]
         right_track /= self.norm_val[2:]
-        
+
         bpv = object_list_to_bpv(object_detections, 352, self.max_seq_length)
-        
+
         points = np.concatenate((left_track,
                                  right_track,
                                  bpv), -1).astype(np.float32)
         seq_size = len(points)
-        
+
         verb_id = self.samples_list[index].label_verb
-        if self.double_output:            
+        if self.double_output:
             noun_id = self.samples_list[index].label_noun
             classes = np.array([verb_id, noun_id], dtype=np.int64)
         else:
             classes = verb_id
-            
+
         if not self.validation:
             return points, seq_size, classes
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, classes, name_parts[-2] + "\\" + name_parts[-1]
 
-class PointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, num_classes=120, 
-                 batch_transform=None, norm_val=[1.,1.,1.,1.], dual=False, 
+
+class PointDatasetLoader(torchDataset):
+    def __init__(self, list_file, max_seq_length=None, num_classes=120,
+                 batch_transform=None, norm_val=None, dual=False,
                  clamp=False, only_left=False, only_right=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
-        if num_classes != 120 and num_classes != 125: #TODO: find a better way to apply mapping
+        if num_classes != 120 and num_classes != 125:  # TODO: find a better way to apply mapping
             self.mapping = make_class_mapping(self.samples_list)
         else:
             self.mapping = None
@@ -479,32 +517,32 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         self.clamp = clamp
         self.only_left = only_left
         self.only_right = only_right
-        
-        self.data_arr = make_data_arr(self.samples_list, None)
-          
+
+        self.data_arr = load_point_samples(self.samples_list, None)
+
     def __len__(self):
         return len(self.samples_list)
-    
+
     def __getitem__(self, index):
-#        hand_tracks = load_pickle(self.samples_list[index].data_path)
-        hand_tracks = self.data_arr[index]
-        
+        #        hand_tracks = load_pickle(self.samples_list[index].data_path)
+        hand_tracks: dict = self.data_arr[index]
+
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
         left_track /= self.norm_val[:2]
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
         right_track /= self.norm_val[2:]
-        if self.clamp: # create new sequences with no zero points
+        if self.clamp:  # create new sequences with no zero points
             inds = np.where(left_track[:, 1] < 1.)
-            if len(inds[0]) > 0: # in the extreme case where the hand is never in the segment we cannot clamp
+            if len(inds[0]) > 0:  # in the extreme case where the hand is never in the segment we cannot clamp
                 left_track = left_track[inds]
             inds = np.where(right_track[:, 1] < 1.)
-            if len(inds[0]) > 0: 
+            if len(inds[0]) > 0:
                 right_track = right_track[inds]
-         
-        if self.max_seq_length != 0: # indirectly supporting clamp without dual but will avoid experiments because it doesn't make much sense to combine the hand motions at different time steps
+
+        if self.max_seq_length != 0:  # indirectly supporting clamp without dual but will avoid experiments because it doesn't make much sense to combine the hand motions at different time steps
             left_track = left_track[np.linspace(0, len(left_track), self.max_seq_length, endpoint=False, dtype=int)]
             right_track = right_track[np.linspace(0, len(right_track), self.max_seq_length, endpoint=False, dtype=int)]
-        
+
         if self.only_left:
             points = left_track
         elif self.only_right:
@@ -512,39 +550,39 @@ class PointDatasetLoader(torch.utils.data.Dataset):
         else:
             points = np.concatenate((left_track, right_track), -1)
         seq_size = len(points)
-        
+
         if self.mapping:
             class_id = self.mapping[self.samples_list[index].label_verb]
         else:
             class_id = self.samples_list[index].label_verb
-        
+
         if not self.validation:
             return points, seq_size, class_id
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return points, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
-class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, sampler, video_list_file, point_list_file=None, num_classes=120, 
-                 img_tmpl='img_{:05d}.jpg', norm_val=[1.,1.,1.,1.], batch_transform=None, validation=False):
-        #TODO: make dataloader for verbs and nouns
+
+class VideoAndPointDatasetLoader(torchDataset):
+    def __init__(self, sampler, video_list_file, point_list_prefix, num_classes=120,
+                 img_tmpl='img_{:05d}.jpg', norm_val=None, batch_transform=None, validation=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(video_list_file)
-        self.samples_path = r"hand_detection_tracks"
-        if num_classes != 120:
+        if num_classes != 120 and num_classes != 125:
             self.mapping = make_class_mapping(self.video_list)
         else:
             self.mapping = None
+        self.point_list_prefix = point_list_prefix
         self.image_tmpl = img_tmpl
         self.transform = batch_transform
         self.validation = validation
         self.norm_val = np.array(norm_val)
-        
+
     def __len__(self):
         return len(self.video_list)
 
     def __getitem__(self, index):
-        frame_count=self.video_list[index].num_frames
+        frame_count = self.video_list[index].num_frames
         label_verb = self.video_list[index].label_verb
         label_noun = self.video_list[index].label_noun
         start_frame = self.video_list[index].start_frame
@@ -558,34 +596,40 @@ class VideoAndPointDatasetLoader(torch.utils.data.Dataset):
 
         if self.transform is not None:
             clip_input = self.transform(clip_input)
-        
+
         a, b, c, pid, vid_id = self.video_list[index].data_path.split("\\")
-        track_path = os.path.join("hand_detection_tracks", pid, vid_id, "{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
-        
+        track_path = os.path.join(self.point_list_prefix, pid, vid_id,
+                                  "{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
         hand_tracks = load_pickle(track_path)
+        # hand_tracks = load_pickle(self.samples_list[index].data_path)
+
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
-        assert(self.video_list[index].num_frames == len(left_track))
-        
-        left_track /= self.norm_val[:2] # normalize to [-0.5, 1]
-        left_track = left_track[sampled_idxs] # keep the points for the sampled frames
-        left_track = left_track[::2] # keep 1 coordinate pair for every two frames
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
-        right_track /= self.norm_val[2:]
+        assert (self.video_list[index].num_frames + 1 == len(left_track)) # add + 1 because in the epic annotations the last frame is inclusive
+
+        left_track = left_track[sampled_idxs]  # keep the points for the sampled frames
         right_track = right_track[sampled_idxs]
+        left_track = left_track[::2]  # keep 1 coordinate pair for every two frames
         right_track = right_track[::2]
-        
+
+        left_track = (left_track * 2 + 1) / self.norm_val[:2] - 1 # normalize to [-1, 1] for x and to [-1, 2] for y which can get values greater than +1 when the hand is originally not detected
+        right_track = (right_track * 2 + 1) / self.norm_val[2:] - 1
+
+        points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1)
+
         if self.mapping:
             class_id = self.mapping[label_verb]
         else:
             class_id = label_verb
 
         if not self.validation:
-            return clip_input, (class_id, left_track, right_track)
+            return clip_input, class_id, points
         else:
-            return clip_input, (class_id, left_track, right_track), self.video_list[index].data_path.split("\\")[-1]
+            return clip_input, class_id, points, self.video_list[index].data_path.split("\\")[-1]
 
-class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
-    def __init__(self, list_file, max_seq_length=None, num_classes=120, 
+
+class PointVectorSummedDatasetLoader(torchDataset):
+    def __init__(self, list_file, max_seq_length=None, num_classes=120,
                  dual=False, validation=False):
         self.samples_list = parse_samples_list(list_file)
         if num_classes != 120:
@@ -595,41 +639,41 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         self.validation = validation
         self.max_seq_length = max_seq_length
         self.dual = dual
-        
+
         self.data_arr = [load_pickle(self.samples_list[index].data_path) for index in range(len(self.samples_list))]
-        
+
     def __len__(self):
         return len(self.samples_list)
-    
+
     def __getitem__(self, index):
-#        hand_tracks = load_pickle(self.samples_list[index].data_path)
+        #        hand_tracks = load_pickle(self.samples_list[index].data_path)
         hand_tracks = self.data_arr[index]
         left_track = np.array(hand_tracks['left'], dtype=np.int)
-        right_track = np.array(hand_tracks['right'], dtype=np.int)   
-        
-        feat_size = 456+256
+        right_track = np.array(hand_tracks['right'], dtype=np.int)
+
+        feat_size = 456 + 256
         feat_addon = 0
         if self.dual:
             feat_addon = feat_size
             feat_size *= 2
-            
+
         vec = np.zeros((len(left_track), feat_size), dtype=np.float32)
         for i in range(len(left_track)):
             xl, yl = left_track[i]
             xr, yr = right_track[i]
             if yl < 256:
                 vec[i:, xl] += 1
-                vec[i:, 456+yl] += 1
+                vec[i:, 456 + yl] += 1
             if yr < 256:
-                vec[i:, feat_addon+xr] += 1
-                vec[i:, feat_addon+456+yr] += 1
-        
+                vec[i:, feat_addon + xr] += 1
+                vec[i:, feat_addon + 456 + yr] += 1
+
         if self.max_seq_length != 0:
             vec = vec[np.linspace(0, len(vec), self.max_seq_length, endpoint=False, dtype=int)]
             seq_size = self.max_seq_length
         else:
-            seq_size = len(left_track)    
-                
+            seq_size = len(left_track)
+
         if self.mapping:
             class_id = self.mapping[self.samples_list[index].label_verb]
         else:
@@ -640,17 +684,18 @@ class PointVectorSummedDatasetLoader(torch.utils.data.Dataset):
         else:
             name_parts = self.samples_list[index].data_path.split("\\")
             return vec, seq_size, class_id, name_parts[-2] + "\\" + name_parts[-1]
-                
 
-class PointImageDatasetLoader(torch.utils.data.Dataset):
+
+class PointImageDatasetLoader(torchDataset):
     sum_seq_size = 0
-    def __init__(self, list_file, batch_transform=None, norm_val=[1.,1.,1.,1.],
+
+    def __init__(self, list_file, batch_transform=None, norm_val=None,
                  validation=False):
         self.samples_list = parse_samples_list(list_file)
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
         self.validation = validation
-    
+
     def __len__(self):
         return len(self.samples_list)
 
@@ -658,34 +703,39 @@ class PointImageDatasetLoader(torch.utils.data.Dataset):
         hand_tracks = load_pickle(self.samples_list[index].data_path)
         left_track = np.array(hand_tracks['left'], dtype=np.int)
         right_track = np.array(hand_tracks['right'], dtype=np.int)
-    
+
         seq_size = len(left_track)
-#        print(seq_size)
+        #        print(seq_size)
         self.sum_seq_size += seq_size
         print(self.sum_seq_size)
         point_imgs = np.zeros([385, 456, seq_size], dtype=np.float32)
-        
-        
+
         for i in range(seq_size):
-            intensities = np.linspace(1., 0., i+1)[::-1]
-            point_imgs[left_track[:i+1,1], left_track[:i+1,0], i] = intensities
-            point_imgs[right_track[:i+1,1], right_track[:i+1,0], i] = intensities
-        
-#        for i in range(seq_size):
-#            for j in range(i+1):
-#                xl, yl = left_track[j]
-#                xr, yr = right_track[j]
-#                if xl < 456 and yl < 256:
-#                    point_imgs[int(yl), int(xl), i] = (j+1)/(i+1)    
-#                if xr < 456 and yr < 256:
-#                    point_imgs[int(yr), int(xr), i] = (j+1)/(i+1)
-#                cv2.imshow('1', point_imgs[:,:,i])
-#                cv2.waitKey(5)
-#        cv2.waitKey(0)
-        
+            intensities = np.linspace(1., 0., i + 1)[::-1]
+            point_imgs[left_track[:i + 1, 1], left_track[:i + 1, 0], i] = intensities
+            point_imgs[right_track[:i + 1, 1], right_track[:i + 1, 0], i] = intensities
+
+        #        for i in range(seq_size):
+        #            for j in range(i+1):
+        #                xl, yl = left_track[j]
+        #                xr, yr = right_track[j]
+        #                if xl < 456 and yl < 256:
+        #                    point_imgs[int(yl), int(xl), i] = (j+1)/(i+1)
+        #                if xr < 456 and yr < 256:
+        #                    point_imgs[int(yr), int(xr), i] = (j+1)/(i+1)
+        #                cv2.imshow('1', point_imgs[:,:,i])
+        #                cv2.waitKey(5)
+        #        cv2.waitKey(0)
+
         return point_imgs[:256, :, :], seq_size, self.samples_list[index].label_verb
-        
-#if __name__=='__main__':
+
+if __name__=='__main__':
+    video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_nd\epic_rgb_train_1.txt"
+    point_list_prefix = 'hand_detection_tracks'
+    val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=0)
+    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=125, img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.])
+    
+    item = loader.__getitem__(0)
 #    
 #    from dataset_loader_utils import Resize, ResizePadFirst
 #    
@@ -721,5 +771,4 @@ class PointImageDatasetLoader(torch.utils.data.Dataset):
 #    cv2.imshow('linext', linext_pf)    
 #    
 #    cv2.waitKey(0)
-#    
-    
+#

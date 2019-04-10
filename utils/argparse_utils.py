@@ -23,7 +23,7 @@ def make_base_parser(val):
         parser.add_argument('val_list', type=str)
         parser.add_argument('--annotations_path', type=str, default=None)
     parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', 
-                        choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0'])
+                        choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0', 'hand_detection_tracks'])
     parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
