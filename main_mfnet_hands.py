@@ -34,7 +34,7 @@ def calc_coord_loss(coords, heatmaps, target_var):
         hms = heatmaps[:, 1]
         target = target_var[:, 1]
         reg_loss = dsntnn.js_reg_losses(hms, target, sigma_t=1.0)
-        reg_losses.append(reg_loss.unsqueeze_(1))
+        reg_losses.append(reg_loss)
     reg_losses = torch.stack(reg_losses, 1)
     # reg_losses = dsntnn.js_reg_losses(heatmaps, target_var, sigma_t=1.0) # shape: [B, D, L, 7, 7]
     # Combine losses into an overall loss

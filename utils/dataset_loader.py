@@ -616,7 +616,7 @@ class VideoAndPointDatasetLoader(torchDataset):
         left_track = (left_track * 2 + 1) / self.norm_val[:2] - 1 # normalize to [-1, 1] for x and to [-1, 2] for y which can get values greater than +1 when the hand is originally not detected
         right_track = (right_track * 2 + 1) / self.norm_val[2:] - 1
 
-        points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1)
+        points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
 
         if self.mapping:
             class_id = self.mapping[label_verb]
