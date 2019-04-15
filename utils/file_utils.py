@@ -90,6 +90,35 @@ def get_train_results(lines):
     
     return epochs, avg_loss, avg_t1, avg_t5
 
+def get_train_results_hands(lines):
+    epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
+    avg_loss, avg_loss_cls, avg_loss_coo, avg_t1, avg_t5 = [], [], [], [], []
+    train_start = False
+    for i, line in enumerate(lines):
+        if line.startswith("Beginning"):
+            train_start = True
+            continue
+        if train_start and line.startswith("Evaluating"):
+            loss_avg, loss_cls_avg, loss_coo_avg, t1_avg, t5_avg = parse_train_line_hands(lines[i-1])
+            avg_loss.append(loss_avg)
+            avg_loss_cls.append(loss_cls_avg)
+            avg_loss_coo.append(loss_coo_avg)
+            avg_t1.append(t1_avg)
+            avg_t5.append(t5_avg)
+            train_start = False
+    return epochs, avg_loss, avg_loss_cls, avg_loss_coo, avg_t1, avg_t5
+
+def parse_train_line_hands(line):
+    loss = line.split("avg:")[1].split("]")[0]
+    loss_avg = float(loss.split(' ')[0])
+    loss_avg_cls = float(loss.split(' ')[2])
+    loss_avg_coo = float(loss.split(' ')[4])
+
+    t1_avg = float(line.split("avg:")[2].split("]")[0])
+    t5_avg = float(line.split("avg:")[3].split("]")[0])
+
+    return loss_avg, loss_avg_cls, loss_avg_coo, t1_avg, t5_avg
+
 def parse_train_line_lr(line):
     loss_avg = float(line.split("avg:")[1].split("]")[0])
     lr = float(line.split()[-1])

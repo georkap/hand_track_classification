@@ -11,13 +11,16 @@ import os
 import numpy as np
 
 from utils.argparse_utils import parse_args_train_log_file
-from utils.file_utils import get_eval_results, get_train_results, make_plot_dataframe, get_loss_over_lr
+from utils.file_utils import get_eval_results, get_train_results, get_train_results_hands, make_plot_dataframe, get_loss_over_lr
 
 args = parse_args_train_log_file() #--train_log_path
 LOG_FILE = args.train_log_path
 file_name = os.path.basename(LOG_FILE).split(".")[0]
 LOG_DIR = os.path.dirname(LOG_FILE)
 output_dir = os.path.join(LOG_DIR, "parsed_log")
+
+coord_loss = args.coord_loss
+lr_graph = not args.no_lr_graph and not coord_loss
 
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
@@ -29,7 +32,10 @@ with open(LOG_FILE) as f:
 test_epochs, test_loss, test_top1, test_top5 = get_eval_results(lines, "Test")
 train_epochs, train_loss, train_top1, train_top5 = get_eval_results(lines, "Train")
 
-epochs, avg_loss, avg_t1, avg_t5 = get_train_results(lines)
+if coord_loss:
+    epochs, avg_loss, avg_loss_cls, avg_loss_coo, avg_t1, avg_t5 = get_train_results_hands(lines)
+else:
+    epochs, avg_loss, avg_t1, avg_t5 = get_train_results(lines)
 
 all_names = ["test acc@1", "test acc@5", "test loss", "train acc@1", "train acc@5", "train loss",
              "avg train acc@1", "avg train acc@5", "avg train loss"]
@@ -41,7 +47,7 @@ test_names = all_names[:3]
 train_names = all_names[3:6]
 avg_train_names = all_names[6:]
 
-if not args.no_lr_graph:
+if lr_graph:
     avg_train_loss, lrs = get_loss_over_lr(lines)
 #    from matplotlib import pyplot as plt
 #    title="{}\n Avg Train loss versus learning rate per batch".format(file_name)
@@ -90,8 +96,14 @@ if len(train_loss)>0:
                         os.path.join(output_dir, "results_train.png"))
     
 # losses
-make_plot_dataframe(np.column_stack([test_loss, avg_loss]),
-                    [all_names[2], all_names[8]],
-                    "{}\n Test and Avg Train losses".format(file_name),
-                    os.path.join(output_dir, "results_loss.png"))
+if coord_loss:
+    make_plot_dataframe(np.column_stack([test_loss, avg_loss, avg_loss_cls, avg_loss_coo]),
+                        [all_names[2], all_names[8], "avg train cls loss", "avg train coord loss"],
+                        "{}\n Test and Avg Train losses".format(file_name),
+                        os.path.join(output_dir, "results_loss.png"))
+else:
+    make_plot_dataframe(np.column_stack([test_loss, avg_loss]),
+                        [all_names[2], all_names[8]],
+                        "{}\n Test and Avg Train losses".format(file_name),
+                        os.path.join(output_dir, "results_loss.png"))
 

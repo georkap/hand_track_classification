@@ -140,11 +140,13 @@ def parse_args(net_type, val=False):
             return args, model_name
         return args, args.model_name
     return args
-    
+
+
 def make_model_name(args, net_type):
     if net_type == 'resnet':
-        model_name = "res{}_{}_{}_{}_{}".format(args.resnet_version, args.channels,
-                         args.batch_size, args.dropout, args.max_epochs)
+        model_name = "res{}_{}_{}_{}_{}".format(args.resnet_version, args.channels, args.batch_size,
+                                                str(args.dropout).split('.')[0]+str(args.dropout).split('.')[1],
+                                                args.max_epochs)
         if args.pretrained:
             model_name = model_name + "_pt"
         if args.feature_extraction:
@@ -160,8 +162,9 @@ def make_model_name(args, net_type):
         else:
             model_name = model_name + "_nopad"
     if net_type == 'mfnet':
-        model_name = "mfnet_{}_{}_{}_cl{}".format(args.batch_size, args.dropout,
-                            args.max_epochs, args.clip_length)
+        model_name = "{}_{}_{}_{}_cl{}".format(net_type, args.batch_size,
+                                               str(args.dropout).split('.')[0]+str(args.dropout).split('.')[1],
+                                               args.max_epochs, args.clip_length)
         if args.pretrained:
             model_name = model_name + "_pt"
     if net_type in ['lstm', 'lstm_polar', 'lstm_diffs']: # not connecting the two cases until I change the result parser to support new and old cases together
@@ -230,6 +233,7 @@ def parse_args_train_log_file():
     parser = argparse.ArgumentParser()
     parser.add_argument("--train_log_path", type=str, help="The file to be analyzed", required=True)
     parser.add_argument("--no_lr_graph", default=False, action='store_true')
+    parser.add_argument("--coord_loss", default=False, action='store_true')
     return parser.parse_args()
 
 def parse_args_train_log_dir():
