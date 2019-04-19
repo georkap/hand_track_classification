@@ -4,7 +4,7 @@ Created on Thu Dec 20 00:06:13 2018
 
 main eval mfnet
 
-@author: Γιώργος
+@author: Georgios Kapidis
 """
 
 import os

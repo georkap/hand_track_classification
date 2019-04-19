@@ -94,9 +94,9 @@ def test_mfnet_h(model, criterion, test_iterator, cur_epoch, dataset, log_file, 
         model.eval()
         print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
         for batch_idx, (inputs, targets, points) in enumerate(test_iterator):
-            inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
-            target_class = torch.tensor(targets).cuda(gpus[0])
-            target_var = torch.tensor(points).cuda(gpus[0])
+            inputs = inputs.cuda(gpus[0])
+            target_class = targets.cuda(gpus[0])
+            target_var = points.cuda(gpus[0])
 
             output, coords, heatmaps = model(inputs)
 
