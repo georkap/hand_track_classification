@@ -23,8 +23,8 @@ from utils.video_sampler import RandomSampling
 
 from models.mfnet_3d_do import MFNET_3D as MFNET_3D_DO
 
-
-
+np.set_printoptions(linewidth=np.inf, threshold=np.inf)
+torch.set_printoptions(linewidth=1000000, threshold=1000000)
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
