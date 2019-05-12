@@ -15,38 +15,50 @@ import pandas
 get_track_class = lambda x: int(x.split('_')[1])
 
 
-# selected_classes = None
-selected_classes = [5,6]
+selected_classes = None
+# selected_classes = [5,6]
 # selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
 
-nd = True
+# nd = True
+nd = False
+
+baradel_split = True
 
 bad_uids = [126, 961, 5099, 12599, 21740, 25710, 26811, 28585, 33647, 37431]
 unavailable = [9, 11, 18]
 available_pids = ["P{:02d}".format(i) for i in range(1,32) if i not in unavailable]
 
-split_1, split_2, split_3, split_4 = {}, {}, {}, {}
-for i in range(28):
-    split_1[available_pids[i]] = "train" if i < 21 else "val"
-    split_2[available_pids[i]] = "train" if i < 14 or i > 20 else "val"
-    split_3[available_pids[i]] = "train" if i < 7 or i > 13 else "val"
-    split_4[available_pids[i]] = "train" if i > 6 else "val"
-split_dicts = [split_1, split_2, split_3, split_4]
+assert len(available_pids) == 28
+if baradel_split:
+    split_1 = {}
+    for i in range(len(available_pids)):
+        split_1[available_pids[i]] = "train" if i < 26 else "val"
+    split_dicts = [split_1]
+else:
+    split_1, split_2, split_3, split_4 = {}, {}, {}, {}
+    for i in range(28):
+        split_1[available_pids[i]] = "train" if i < 21 else "val"
+        split_2[available_pids[i]] = "train" if i < 14 or i > 20 else "val"
+        split_3[available_pids[i]] = "train" if i < 7 or i > 13 else "val"
+        split_4[available_pids[i]] = "train" if i > 6 else "val"
+    split_dicts = [split_1, split_2, split_3, split_4]
 
 BASE_DIR = r"frames_rgb_flow\rgb\train"
-# SPLITS_DIR = r"..\..\splits\epic_rgb"
+SPLITS_DIR = r"..\..\splits\epic_rgb"
 # SPLITS_DIR = r"..\..\splits\epic_rgb_select24"
-SPLITS_DIR = r"..\..\splits\epic_rgb_select2_56"
+# SPLITS_DIR = r"..\..\splits\epic_rgb_select2_56"
 if nd:
     SPLITS_DIR += '_nd'
+if baradel_split:
+    SPLITS_DIR += '_brd'
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
-train_names = [os.path.join(SPLITS_DIR, "epic_rgb_train_{}.txt".format(i)) for i in range(1,5)]
-val_names = [os.path.join(SPLITS_DIR, "epic_rgb_val_{}.txt".format(i)) for i in range(1,5)]
+train_names = [os.path.join(SPLITS_DIR, "epic_rgb_train_{}.txt".format(i)) for i in range(1, len(split_dicts) + 1)] # in range(1,5)
+val_names = [os.path.join(SPLITS_DIR, "epic_rgb_val_{}.txt".format(i)) for i in range(1, len(split_dicts) + 1)]
 
 train_files = []
 val_files = []
-for i in range(4):
+for i in range(len(split_dicts)):
     train_files.append(open(train_names[i], 'a'))
     val_files.append(open(val_names[i], 'a'))
 
@@ -68,13 +80,13 @@ for index, row in annotations.iterrows():
     videoid = row.video_id
     action_dir = os.path.join(BASE_DIR, pid, videoid)
     line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb_class, noun_class, uid, start_frame)
-    for i in range(4): # in range(num_splits)
+    for i in range(len(split_dicts)):
         split = split_dicts[i][pid]
         if split == 'train':
             train_files[i].write(line)
         else:
             val_files[i].write(line)
 
-for i in range(4):
+for i in range(len(split_dicts)):
     train_files[i].close()
     val_files[i].close()
