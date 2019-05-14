@@ -643,19 +643,19 @@ class VideoAndPointDatasetLoader(torchDataset):
                 left_track[:, 0] = max_w - left_track[:, 0]
                 right_track[:, 0] = max_w - right_track[:, 0]
 
-            def vis_with_circle(img, left_point, right_point, winname):
-                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255,0,0), 4)
-                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0,0,255), 4)
-                cv2.imshow(winname, k)
-
-            vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
-            orig_left = np.array(hand_tracks['left'], dtype=np.float32)
-            orig_left = orig_left[idxs]
-            orig_right = np.array(hand_tracks['right'], dtype=np.float32)
-            orig_right = orig_right[idxs]
-            vis_with_circle(sampled_frames[-1], orig_left[-1], orig_right[-1], 'original')
-            vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'original2')
-            cv2.waitKey(0)
+            # def vis_with_circle(img, left_point, right_point, winname):
+            #     k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255,0,0), 4)
+            #     k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0,0,255), 4)
+            #     cv2.imshow(winname, k)
+            #
+            # vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
+            # orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+            # orig_left = orig_left[idxs]
+            # orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+            # orig_right = orig_right[idxs]
+            # vis_with_circle(sampled_frames[-1], orig_left[-1], orig_right[-1], 'original')
+            # vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'original2')
+            # cv2.waitKey(0)
 
 
         # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
