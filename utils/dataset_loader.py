@@ -594,9 +594,6 @@ class VideoAndPointDatasetLoader(torchDataset):
 
         clip_input = np.concatenate(sampled_frames, axis=2)
 
-        if self.transform is not None:
-            clip_input = self.transform(clip_input)
-
         a, b, c, pid, vid_id = self.video_list[index].data_path.split("\\")
         track_path = os.path.join(self.point_list_prefix, pid, vid_id,
                                   "{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
@@ -610,11 +607,62 @@ class VideoAndPointDatasetLoader(torchDataset):
         idxs = (np.array(sampled_idxs) - start_frame).astype(np.int)
         left_track = left_track[idxs]  # keep the points for the sampled frames
         right_track = right_track[idxs]
-        left_track = left_track[::2]  # keep 1 coordinate pair for every two frames
+        left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
         right_track = right_track[::2]
 
-        left_track = (left_track * 2 + 1) / self.norm_val[:2] - 1 # normalize to [-1, 1] for x and to [-1, 2] for y which can get values greater than +1 when the hand is originally not detected
-        right_track = (right_track * 2 + 1) / self.norm_val[2:] - 1
+        norm_val = self.norm_val
+        if self.transform is not None:
+            or_h, or_w, _ = clip_input.shape
+            # for i in range(10):
+            clip_input = self.transform(clip_input)
+            is_flipped = False
+            if 'RandomScale' in self.transform.transforms[0].__repr__(): # means we are in training so get the transformations
+                sc_w, sc_h = self.transform.transforms[0].get_new_size()
+                tl_y, tl_x = self.transform.transforms[1].get_tl()
+                is_flipped = self.transform.transforms[2].is_flipped()
+            elif 'Resize' in self.transform.transforms[0].__repr__():  # means we are in testing
+                sc_h, sc_w, _ = self.transform.transforms[0].get_new_shape()
+                tl_y, tl_x = self.transform.transforms[1].get_tl()
+            else:
+                sc_w = or_w
+                sc_h = or_h
+                tl_x = 0
+                tl_y = 0
+
+            # apply transforms to tracks
+            scale_x = sc_w/or_w
+            scale_y = sc_h/or_h
+            left_track *= [scale_x, scale_y]
+            left_track -= [tl_x, tl_y]
+            right_track *= [scale_x, scale_y]
+            right_track -= [tl_x, tl_y]
+
+            _,_, max_h, max_w = clip_input.shape
+            norm_val = [max_w, max_h, max_w, max_h]
+            if is_flipped:
+                left_track[:, 0] = max_w - left_track[:, 0]
+                right_track[:, 0] = max_w - right_track[:, 0]
+
+            def vis_with_circle(img, left_point, right_point, winname):
+                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255,0,0), 4)
+                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0,0,255), 4)
+                cv2.imshow(winname, k)
+
+            vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
+            orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+            orig_left = orig_left[idxs]
+            orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+            orig_right = orig_right[idxs]
+            vis_with_circle(sampled_frames[-1], orig_left[-1], orig_right[-1], 'original')
+            vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'original2')
+            cv2.waitKey(0)
+
+
+        # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
+        left_track = (left_track * 2 + 1) / norm_val[:2] - 1
+        right_track = (right_track * 2 + 1) / norm_val[2:] - 1
+        # print("transformed:", left_track, "\n",right_track)
+        # print("original:", (2*orig_left[::2]+1)/self.norm_val[:2]-1, "\n", (2*orig_right[::2]+1)/self.norm_val[2:]-1)
 
         points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
 
@@ -733,10 +781,28 @@ class PointImageDatasetLoader(torchDataset):
 if __name__=='__main__':
     video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd\epic_rgb_train_1.txt"
     point_list_prefix = 'hand_detection_tracks'
-    val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=0)
-    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=125, img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.])
-    
-    item = loader.__getitem__(0)
+
+    import torchvision.transforms as transforms
+    from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
+        Normalize, \
+        Resize, CenterCrop
+    mean_3d = [124 / 255, 117 / 255, 104 / 255]
+    std_3d = [0.229, 0.224, 0.225]
+
+    seed = 2
+    train_transforms = transforms.Compose([
+        RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288], seed=seed),
+        RandomCrop((224, 224), seed=seed), RandomHorizontalFlip(seed=seed), RandomHLS(vars=[15, 35, 25]),
+        ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+    test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
+         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+
+    val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=1)
+    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, batch_transform=test_transforms,
+                                        num_classes=125, img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.])
+
+    for i in range(10):
+        item = loader.__getitem__(i)
 #    
 #    from dataset_loader_utils import Resize, ResizePadFirst
 #    

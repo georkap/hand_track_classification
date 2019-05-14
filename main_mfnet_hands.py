@@ -9,6 +9,7 @@ main mfnet that classifies activities and predicts hand locations
 
 import time
 import torch, dsntnn
+from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
@@ -147,7 +148,7 @@ def main():
         RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
     # make train-val dataset loaders
     train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list,
@@ -171,7 +172,7 @@ def main():
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
 
-    # config optimizatερ
+    # config optimizer
     param_base_layers = []
     param_new_layers = []
     name_base_layers = []

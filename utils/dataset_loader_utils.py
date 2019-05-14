@@ -30,14 +30,21 @@ class WidthCrop(object):
 class RandomHorizontalFlip(object):
     """Randomly horizontally flips the given numpy array with a probability of 0.5
     """
-    def __init__(self):
-        self.rng = np.random.RandomState(0)
+    def __init__(self, seed=0):
+        self.rng = np.random.RandomState(seed)
+        self.flipped = False
 
     def __call__(self, data):
         if self.rng.rand() < 0.5:
             data = np.fliplr(data)
             data = np.ascontiguousarray(data)
+            self.flipped = True
+        else:
+            self.flipped = False
         return data
+
+    def is_flipped(self):
+        return self.flipped
 
 class To01Range(object):
     def __init__(self, binarize):
@@ -147,6 +154,7 @@ class Resize(object):
         self.size = size # [w, h]
         self.binarize = binarize
         self.interpolation = interpolation
+        self.new_shape = tuple()
 
     def __call__(self, data):
         h, w, c = data.shape if len(data.shape) == 3 else (data.shape[0], data.shape[1],1)
@@ -173,7 +181,12 @@ class Resize(object):
         if self.binarize: 
             scaled_data = np.where(scaled_data > 1, 255, 0).astype(np.float32)
 
+        self.new_shape = scaled_data.shape
+
         return scaled_data
+
+    def get_new_shape(self):
+        return self.new_shape
 
 class CenterCrop(object):
     """Crops the given numpy array at the center to have a region of
@@ -185,6 +198,7 @@ class CenterCrop(object):
             self.size = (size, size)
         else:
             self.size = size
+        self.tl = tuple()
 
     def __call__(self, data):
         h, w, c = data.shape
@@ -192,19 +206,25 @@ class CenterCrop(object):
         x1 = int(round((w - tw) / 2.))
         y1 = int(round((h - th) / 2.))
         cropped_data = data[y1:(y1+th), x1:(x1+tw), :]
+        self.tl = (y1, x1)
         return cropped_data
+
+    def get_tl(self):
+        ''' Get top left (y, x) in image coordinates of the location where crop starts'''
+        return self.tl
 
 class RandomCrop(object):
     """Crops the given numpy array at the random location to have a region of
     the given size. size can be a tuple (target_height, target_width)
     or an integer, in which case the target will be of a square shape (size, size)
     """
-    def __init__(self, size):
+    def __init__(self, size, seed=0):
         if isinstance(size, int):
             self.size = (size, size)
         else:
             self.size = size
-        self.rng = np.random.RandomState(0)
+        self.rng = np.random.RandomState(seed)
+        self.tl = tuple()
 
     def __call__(self, data):
         h, w, c = data.shape
@@ -212,7 +232,12 @@ class RandomCrop(object):
         x1 = self.rng.choice(range(w - tw))
         y1 = self.rng.choice(range(h - th))
         cropped_data = data[y1:(y1+th), x1:(x1+tw), :]
+        self.tl = (y1, x1)
         return cropped_data
+
+    def get_tl(self):
+        ''' Get top left (y, x) in image coordinates of the location where crop starts'''
+        return self.tl
     
 class RandomScale(object):
     """ Rescales the input numpy array to the given 'size'.
@@ -225,16 +250,17 @@ class RandomScale(object):
     def __init__(self, make_square=False,
                        aspect_ratio=[1.0, 1.0],
                        slen=[224, 288],
-                       interpolation=cv2.INTER_LINEAR):
+                       interpolation=cv2.INTER_LINEAR, seed=0):
         assert slen[1] >= slen[0], \
-                "slen ({}) should be in increase order".format(scale)
+                "slen ({}) should be in increase order".format(slen)
         assert aspect_ratio[1] >= aspect_ratio[0], \
                 "aspect_ratio ({}) should be in increase order".format(aspect_ratio)
         self.slen = slen # [min factor, max factor]
         self.aspect_ratio = aspect_ratio
         self.make_square = make_square
         self.interpolation = interpolation
-        self.rng = np.random.RandomState(0)
+        self.rng = np.random.RandomState(seed)
+        self.new_size = tuple()
 
     def __call__(self, data):
         h, w, c = data.shape
@@ -249,8 +275,12 @@ class RandomScale(object):
         resize_factor = self.rng.uniform(self.slen[0], self.slen[1]) / min(new_w, new_h)
         new_w *= resize_factor
         new_h *= resize_factor
-        scaled_data = cv2.resize(data, (int(new_w+1), int(new_h+1)), self.interpolation)
+        self.new_size = (int(new_w + 1), int(new_h + 1))
+        scaled_data = cv2.resize(data, self.new_size, self.interpolation)
         return scaled_data
+
+    def get_new_size(self):
+        return self.new_size
     
 class RandomHLS(object):
     def __init__(self, vars=[15, 35, 25]):

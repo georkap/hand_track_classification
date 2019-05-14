@@ -229,7 +229,7 @@ def main():
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
 
-    # config optimizatερ
+    # config optimizer
     param_base_layers = []
     param_new_layers = []
     name_base_layers = []
