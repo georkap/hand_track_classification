@@ -603,7 +603,6 @@ class VideoAndPointDatasetLoader(torchDataset):
         left_track = np.array(hand_tracks['left'], dtype=np.float32)
         right_track = np.array(hand_tracks['right'], dtype=np.float32)
         assert (self.video_list[index].num_frames + 1 == len(left_track)) # add + 1 because in the epic annotations the last frame is inclusive
-        return index
 
         idxs = (np.array(sampled_idxs) - start_frame).astype(np.int)
         left_track = left_track[idxs]  # keep the points for the sampled frames
