@@ -15,7 +15,7 @@ import torchvision.transforms as transforms
 
 from models.mfnet_3d_hands import MFNET_3D
 from utils.argparse_utils import parse_args
-from utils.file_utils import print_and_save, save_checkpoints, init_folders
+from utils.file_utils import print_and_save, save_checkpoints, resume_checkpoint, init_folders
 from utils.dataset_loader import VideoAndPointDatasetLoader, prepare_sampler
 from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, \
     Resize, CenterCrop
@@ -137,6 +137,10 @@ def main():
     model_ft.cuda(device=args.gpus[0])
     model_ft = torch.nn.DataParallel(model_ft, device_ids=args.gpus, output_device=args.gpus[0])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
+    if args.resume:
+        model_ft, ckpt_path = resume_checkpoint(model_ft, output_dir, model_name, args.resume_from)
+        print_and_save("Resuming training from: {}".format(ckpt_path), log_file)
+
 
     # load train-val sampler
     train_sampler = prepare_sampler("train", args.clip_length, args.frame_interval)
