@@ -197,8 +197,8 @@ def main():
                                 weight_decay=args.decay,
                                 nesterov=True)
 
-    if args.resume and 'optimizer' in checkpoint:
-        optimizer.load_state_dict(checkpoint['optimizer'])
+    # if args.resume and 'optimizer' in checkpoint:
+    #     optimizer.load_state_dict(checkpoint['optimizer'])
 
     ce_loss = torch.nn.CrossEntropyLoss().cuda(device=args.gpus[0])
     # mse_loss = torch.nn.MSELoss().cuda(device=args.gpus[0])
