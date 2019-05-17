@@ -124,9 +124,9 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
     for batch_idx, (inputs, targets) in enumerate(train_iterator):
         if isinstance(lr_scheduler, CyclicLR):
             lr_scheduler.step()
-            
-        inputs = torch.tensor(inputs, requires_grad=True).cuda(gpus[0])
-        targets = torch.tensor(targets).cuda(gpus[0])
+
+        inputs = inputs.cuda(gpus[0])
+        targets = targets.cuda(gpus[0])
 
         # TODO: Fix mixup and cuda integration, especially for mfnet
         if mixup_alpha != 1:
@@ -150,14 +150,14 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
         
         optimizer.step()
 
-        t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1,5))
+        t1, t5 = accuracy(output.detach(), targets.detach(), topk=(1,5))
         top1.update(t1.item(), output.size(0))
         top5.update(t5.item(), output.size(0))
         losses.update(loss.item(), output.size(0))
         batch_time.update(time.time() - t0)
         t0 = time.time()
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
-                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg, 
+                cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg,
                 lr_scheduler.get_lr()[0]), log_file)
 
 def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
@@ -166,13 +166,13 @@ def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus
         model.eval()
         print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
         for batch_idx, (inputs, targets) in enumerate(test_iterator):
-            inputs = torch.tensor(inputs).cuda(gpus[0])
-            targets = torch.tensor(targets).cuda(gpus[0])
+            inputs = inputs.cuda(gpus[0])
+            targets = targets.cuda(gpus[0])
 
             output = model(inputs)
             loss = criterion(output, targets)
 
-            t1, t5 = accuracy(output.detach().cpu(), targets.detach().cpu(), topk=(1,5))
+            t1, t5 = accuracy(output.detach(), targets.detach(), topk=(1,5))
             top1.update(t1.item(), output.size(0))
             top5.update(t5.item(), output.size(0))
             losses.update(loss.item(), output.size(0))

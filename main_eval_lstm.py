@@ -285,12 +285,15 @@ def main():
     if not isinstance(top1, tuple):
         video_preds = [x[0] for x in outputs]
         video_labels = [x[1] for x in outputs]        
-        mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", args.annotations_path, args.val_list, log_file)
+        mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", args.annotations_path,
+                                                  args.val_list, args.verb_classes, log_file)
     else:
         video_preds_a, video_preds_b = [x[0] for x in outputs[0]], [x[0] for x in outputs[1]]
         video_labels_a, video_labels_b = [x[1] for x in outputs[0]], [x[1] for x in outputs[1]]
-        mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", args.annotations_path, args.val_list, log_file)
-        mean_cls_acc_b, top1_acc_b = eval_final_print(video_preds_b, video_labels_b, "Nouns", args.annotations_path, args.val_list, log_file)
+        mean_cls_acc_a, top1_acc_a = eval_final_print(video_preds_a, video_labels_a, "Verbs", args.annotations_path,
+                                                      args.val_list, args.verb_classes, log_file)
+        mean_cls_acc_b, top1_acc_b = eval_final_print(video_preds_b, video_labels_b, "Nouns", args.annotations_path,
+                                                      args.val_list, args.verb_classes, log_file)
 
 if __name__ == '__main__':
     main()

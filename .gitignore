@@ -104,7 +104,7 @@ venv.bak/
 # mypy
 .mypy_cache/
 
-# Project specific symlinks
+# Project specific symlinks or dirs
 hand_detection_track_images
 hand_detection_tracks
 frames_rgb_flow
@@ -115,10 +115,15 @@ cln_noun_tracks_mh0
 vis_weights*
 vis_util*
 temp_parsers*
+runs*
 
+# Project specific python scripts
 batch_*
 lstm_tests.py
 main_lstm_weighted.py
+main_3d_resnets.py
+
+# Project specific data files
 
 # PyCharm project specifics
 .idea

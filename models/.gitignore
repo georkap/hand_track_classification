@@ -1,1 +1,3 @@
 MFNet3D_Kinetics-400_72.8.pth
+resnet-18-kinetics.pth
+resnet_3d.py

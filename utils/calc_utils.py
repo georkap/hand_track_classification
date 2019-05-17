@@ -115,8 +115,8 @@ def rec_prec_per_class(confusion_matrix):
     
     return np.around(100*recall, 2), np.around(100*precision, 2)
 
-def analyze_preds_labels(preds, labels):
-    cf = confusion_matrix(labels, preds).astype(int)
+def analyze_preds_labels(preds, labels, all_class_indices):
+    cf = confusion_matrix(labels, preds, all_class_indices).astype(int)
     recall, precision = rec_prec_per_class(cf)
 
     cls_cnt = cf.sum(axis=1)
@@ -139,8 +139,9 @@ def avg_rec_prec_trimmed(pred, labels, valid_class_indices, all_class_indices):
     
     return np.sum(precision)/len(precision), np.sum(recall)/len(recall), cm_trimmed_rows.astype(int)
 
-def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_list, log_file):
-    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels)
+def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_list, max_classes, log_file):
+    cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels,
+                                                                                  all_class_indices=list(range(int(max_classes))))
     print_and_save(cls_type, log_file)
     print_and_save(cf, log_file)
     
