@@ -130,13 +130,10 @@ def main():
         val_transforms = transforms.Compose([Resize((256, 256), False), RandomCrop((224, 224)),
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
-        val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list,
-                                                 num_classes=args.verb_classes,
-                                                 point_list_prefix=args.bpv_prefix,
-                                                 batch_transform=val_transforms,
-                                                 img_tmpl='frame_{:010d}.jpg',
-                                                 norm_val=[456., 256., 456., 256.],
-                                                 validation=True)
+        val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list, point_list_prefix=args.bpv_prefix,
+                                                num_classes=args.verb_classes, img_tmpl='frame_{:010d}.jpg',
+                                                norm_val=[456., 256., 456., 256.], batch_transform=val_transforms,
+                                                validation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
                                                shuffle=False,

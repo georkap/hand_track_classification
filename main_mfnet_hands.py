@@ -141,7 +141,6 @@ def main():
         model_ft, ckpt_path = resume_checkpoint(model_ft, output_dir, model_name, args.resume_from)
         print_and_save("Resuming training from: {}".format(ckpt_path), log_file)
 
-
     # load train-val sampler
     train_sampler = prepare_sampler("train", args.clip_length, args.frame_interval)
     test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
@@ -149,24 +148,20 @@ def main():
     # load train-val transforms
     train_transforms = transforms.Compose([
         RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288]),
-        RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
+        RandomCrop((224, 224)),
+        #RandomHorizontalFlip(),
+        RandomHLS(vars=[15, 35, 25]),
         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
     # make train-val dataset loaders
-    train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list,
-                                              num_classes=args.verb_classes,
-                                              point_list_prefix=args.bpv_prefix,
-                                              batch_transform=train_transforms,
-                                              img_tmpl='frame_{:010d}.jpg',
-                                              norm_val=[456., 256., 456., 256.])
-    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list,
-                                             num_classes=args.verb_classes,
-                                             point_list_prefix=args.bpv_prefix,
-                                             batch_transform=test_transforms,
-                                             img_tmpl='frame_{:010d}.jpg',
-                                             norm_val=[456., 256., 456., 256.])
+    train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list, point_list_prefix=args.bpv_prefix,
+                                              num_classes=args.verb_classes, img_tmpl='frame_{:010d}.jpg',
+                                              norm_val=[456., 256., 456., 256.], batch_transform=train_transforms)
+    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list, point_list_prefix=args.bpv_prefix,
+                                             num_classes=args.verb_classes, img_tmpl='frame_{:010d}.jpg',
+                                             norm_val=[456., 256., 456., 256.], batch_transform=test_transforms)
 
     # make train-val iterators
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
