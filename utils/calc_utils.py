@@ -13,18 +13,31 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 from utils.file_utils import print_and_save
 
-def init_annot_and_splits(annotations_file):
+def init_annot_and_splits(annotations_file, brd_splits = False):
     # init annotation file and splits
     annotations = pandas.read_csv(annotations_file)
-    
+
     # get number of verb and noun classes for the full "train" dataset as discussed in the paper
     verb_classes = len(np.unique(annotations.verb_class.values))
     noun_classes = len(np.unique(annotations.noun_class.values))
     print("Classes in original train dataset, verbs:{}, nouns:{}".format(verb_classes, noun_classes))
-    
+
     unavailable = [9, 11, 18]
-    available_pids = ["P{:02d}".format(i) for i in range(1,32) if i not in unavailable]
-    
+    available_pids = ["P{:02d}".format(i) for i in range(1, 32) if i not in unavailable]
+
+    if brd_splits:
+        return annotations, init_splits_brd(available_pids)
+    else:
+        return annotations, init_splits_custom(available_pids)
+
+def init_splits_brd(available_pids):
+    split_1 = {}
+    for i in range(len(available_pids)):
+        split_1[available_pids[i]] = "train" if i < 26 else "val"
+    split_dicts = [split_1]
+    return split_dicts
+
+def init_splits_custom(available_pids):
     split_1, split_2, split_3, split_4 = {}, {}, {}, {}
     for i in range(28):
         split_1[available_pids[i]] = "train" if i < 21 else "val"
@@ -32,11 +45,11 @@ def init_annot_and_splits(annotations_file):
         split_3[available_pids[i]] = "train" if i < 7 or i > 13 else "val"
         split_4[available_pids[i]] = "train" if i > 6 else "val"
     split_dicts = [split_1, split_2, split_3, split_4]
-    
-    return annotations, split_dicts
+    return split_dicts
 
-def get_classes(annotations_file, split_path, num_instances):
-    annotations, split_dicts = init_annot_and_splits(annotations_file)
+
+def get_classes(annotations_file, split_path, brd_splits, num_instances):
+    annotations, split_dicts = init_annot_and_splits(annotations_file, brd_splits=brd_splits)
     # export verb and noun classes with more than 100 instances in training
     split_id = int(os.path.basename(split_path).split('.')[0].split('_')[-1]) - 1
     split = split_dicts[split_id]
@@ -146,7 +159,9 @@ def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_
     print_and_save(cf, log_file)
     
     if annotations_path:
-        valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path, val_list, 100)
+        brd_splits = '_brd' in val_list
+        valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path,
+                                                                                               val_list, brd_splits, 100)
         if cls_type == 'Verbs':
             valid_indices, ids_sorted = valid_verb_indices, verb_ids_sorted  
             all_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
