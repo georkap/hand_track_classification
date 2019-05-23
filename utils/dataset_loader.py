@@ -272,7 +272,7 @@ class VideoDatasetLoader(torchDataset):
         if not self.validation:
             return clip_input, classes
         else:
-            return clip_input, classes, self.video_list[index].data_path.split("\\")[-1]
+            return clip_input, classes, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
 
 
 # TODO: this is for sliding window sample creation with a fixed sizes
@@ -588,8 +588,8 @@ class VideoAndPointDatasetLoader(torchDataset):
         label_noun = self.video_list[index].label_noun
         start_frame = self.video_list[index].start_frame
         start_frame = start_frame if start_frame != -1 else 0
-        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index,
-                                             start_frame=start_frame)
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index, start_frame=start_frame)
+        # sampled_idxs = list(range(start_frame, start_frame + frame_count + 1))
 
         sampled_frames = load_images(self.video_list[index].data_path, sampled_idxs, self.image_tmpl)
 
@@ -678,7 +678,7 @@ class VideoAndPointDatasetLoader(torchDataset):
         if not self.validation:
             return clip_input, class_id, points
         else:
-            return clip_input, class_id, points, self.video_list[index].data_path.split("\\")[-1]
+            return clip_input, class_id, points, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
 
 
 class PointVectorSummedDatasetLoader(torchDataset):
@@ -786,6 +786,7 @@ if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd\epic_rgb_train_1.txt"
     video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_brd\epic_rgb_train_1.txt"
     video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
+    video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
     point_list_prefix = 'hand_detection_tracks'
 
     import torchvision.transforms as transforms

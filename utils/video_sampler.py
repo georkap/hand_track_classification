@@ -5,6 +5,28 @@ import math
 import numpy as np
 
 
+class MiddleSampling(object):
+    def __init__(self, num):
+        assert num > 0
+        self.num = num
+
+    ''' sample uniformly between start frame and range_max if range_max < 32
+            If range_max > 32 then target 32 frames around (start_frame+range_max)/2 and sample uniformly from them.
+    '''
+    def sampling(self, range_max, v_id=None, pref_failed=False, start_frame=0):
+        assert range_max > 0
+        if range_max < 32:
+            clip_start = start_frame
+            clip_end = clip_start + range_max
+        else:
+            middle = start_frame + range_max//2
+            clip_start = middle - 16
+            clip_end = middle + 16
+        idxs = np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
+        for idx in idxs:
+            assert idx >=start_frame and idx <= start_frame+range_max
+        return idxs
+
 class RandomSampling(object):
     def __init__(self, num, interval=1, speed=[1.0, 1.0], seed=0):
         assert num > 0, "at least sampling 1 frame"

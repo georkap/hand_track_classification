@@ -17,9 +17,9 @@ from models.mfnet_3d_hands import MFNET_3D
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save
 from utils.dataset_loader import VideoAndPointDatasetLoader
-from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize
+from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize, CenterCrop
 from utils.calc_utils import AverageMeter, accuracy, eval_final_print
-from utils.video_sampler import RandomSampling
+from utils.video_sampler import RandomSampling, MiddleSampling
 
 from models.mfnet_3d_do import MFNET_3D as MFNET_3D_DO
 
@@ -127,8 +127,11 @@ def main():
         val_sampler = RandomSampling(num=args.clip_length,
                                      interval=args.frame_interval,
                                      speed=[1.0, 1.0], seed=i)
+        # val_sampler = MiddleSampling(num=args.clip_length)
         val_transforms = transforms.Compose([Resize((256, 256), False), RandomCrop((224, 224)),
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+        # val_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
+        #                                      ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
         val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list, point_list_prefix=args.bpv_prefix,
                                                 num_classes=args.verb_classes, img_tmpl='frame_{:010d}.jpg',

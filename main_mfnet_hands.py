@@ -149,7 +149,7 @@ def main():
     train_transforms = transforms.Compose([
         RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288]),
         RandomCrop((224, 224)),
-        #RandomHorizontalFlip(),
+        RandomHorizontalFlip(),
         RandomHLS(vars=[15, 35, 25]),
         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
