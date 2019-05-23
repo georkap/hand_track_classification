@@ -105,15 +105,11 @@ venv.bak/
 .mypy_cache/
 
 # Project specific symlinks or dirs
-hand_detection_track_images
-hand_detection_tracks
+hand_detection_tr*
 frames_rgb_flow
-hand_detection_tracks_fd_train
 noun_bpv_oh
 tracked_noun_bpv_oh_mh0
 cln_noun_tracks_mh0
-vis_weights*
-vis_util*
 temp_parsers*
 runs*
 
@@ -122,6 +118,7 @@ batch_*
 lstm_tests.py
 main_lstm_weighted.py
 main_3d_resnets.py
+vis*
 
 # Project specific data files
 

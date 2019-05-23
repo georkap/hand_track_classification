@@ -784,10 +784,10 @@ class PointImageDatasetLoader(torchDataset):
 
 if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd\epic_rgb_train_1.txt"
-    video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_brd\epic_rgb_train_1.txt"
+    # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_brd\epic_rgb_train_1.txt"
     video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
-    video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
-    point_list_prefix = 'hand_detection_tracks'
+    # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
+    point_list_prefix = 'hand_detection_tracks_lr'
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
