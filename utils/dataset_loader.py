@@ -642,8 +642,11 @@ class VideoAndPointDatasetLoader(torchDataset):
             _,_, max_h, max_w = clip_input.shape
             norm_val = [max_w, max_h, max_w, max_h]
             if is_flipped:
-                left_track[:, 0] = max_w - left_track[:, 0]
-                right_track[:, 0] = max_w - right_track[:, 0]
+                # left_track[:, 0] = max_w - left_track[:, 0]
+                # right_track[:, 0] = max_w - right_track[:, 0]
+                temp_left_track = left_track
+                left_track[:, 0] = max_w - right_track[:, 0]
+                right_track[:, 0] = max_w - temp_left_track[:, 0]
 
             if self.vis_data:
                 def vis_with_circle(img, left_point, right_point, winname):
