@@ -20,8 +20,8 @@ for i in range(28):
     split_4[available_pids[i]] = "train" if i > 6 else "val"
 split_dicts = [split_1, split_2, split_3, split_4]
 
-BASE_DIR = r"..\hand_detection_tracks"
-SPLITS_DIR = r"..\splits"
+BASE_DIR = r"..\..\hand_detection_tracks_lr005"
+SPLITS_DIR = r"..\..\splits\hand_tracks_lr005"
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
 train_names = [os.path.join(SPLITS_DIR, "hand_locs_train_{}.txt".format(i)) for i in range(1,5)]
