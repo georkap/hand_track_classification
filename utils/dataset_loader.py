@@ -642,11 +642,11 @@ class VideoAndPointDatasetLoader(torchDataset):
             _,_, max_h, max_w = clip_input.shape
             norm_val = [max_w, max_h, max_w, max_h]
             if is_flipped:
-                # left_track[:, 0] = max_w - left_track[:, 0]
-                # right_track[:, 0] = max_w - right_track[:, 0]
-                temp_left_track = left_track
-                left_track[:, 0] = max_w - right_track[:, 0]
-                right_track[:, 0] = max_w - temp_left_track[:, 0]
+                left_track[:, 0] = max_w - left_track[:, 0]
+                right_track[:, 0] = max_w - right_track[:, 0]
+                # temp_left_track = left_track
+                # left_track[:, 0] = max_w - right_track[:, 0]
+                # right_track[:, 0] = max_w - temp_left_track[:, 0]
 
             if self.vis_data:
                 def vis_with_circle(img, left_point, right_point, winname):
@@ -790,7 +790,7 @@ if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_brd\epic_rgb_train_1.txt"
     video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
-    point_list_prefix = 'hand_detection_tracks_lr'
+    point_list_prefix = 'hand_detection_tracks'
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
