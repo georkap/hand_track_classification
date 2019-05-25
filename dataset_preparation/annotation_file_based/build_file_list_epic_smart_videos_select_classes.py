@@ -16,8 +16,9 @@ get_track_class = lambda x: int(x.split('_')[1])
 
 
 # selected_classes = None
+selected_classes = [0, 1]
 # selected_classes = [5,6]
-selected_classes = [5, 6, 7, 8]
+# selected_classes = [5, 6, 7, 8]
 # selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
 
 nd = True
@@ -46,7 +47,7 @@ else:
 
 BASE_DIR = r"frames_rgb_flow\rgb\train"
 # SPLITS_DIR = r"..\..\splits\epic_rgb"
-SPLITS_DIR = r"..\..\splits\epic_rgb_select4_5678"
+SPLITS_DIR = r"..\..\splits\epic_rgb_select2_01"
 # SPLITS_DIR = r"..\..\splits\epic_rgb_select24"
 # SPLITS_DIR = r"..\..\splits\epic_rgb_select2_56"
 if nd:
