@@ -126,6 +126,8 @@ def parse_args_eval(parser):
     # lstm
     parser.add_argument('--save_attentions', default=False, action='store_true')
 
+    return parser
+
 def parse_args_program(parser):
     # Program parameters
     parser.add_argument('--gpus', nargs='+', type=int, default=[0, 1])
@@ -142,6 +144,7 @@ def parse_args(net_type, val=False):
     parser = parse_args_dataset(parser, net_type)
     parser = parse_args_network(parser, net_type)
     parser = parse_args_training(parser)
+    parser = parse_args_eval(parser)
     parser = parse_args_program(parser)
     
     args = parser.parse_args()
