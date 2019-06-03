@@ -7,7 +7,7 @@ argparse utils
 @author: GEO
 """
 
-import argparse
+import os, argparse
 
 def make_base_parser(val):
     parser = argparse.ArgumentParser(description='Hand activity recognition')
@@ -98,6 +98,8 @@ def parse_args_training(parser):
     parser.add_argument('--dropout', type=float, default=None)
     parser.add_argument('--mixup_a', type=float, default=1)
     parser.add_argument('--lr', type=float, default=0.001)
+    parser.add_argument('--lr_mult_base', type=float, default=1.0)
+    parser.add_argument('--lr_mult_new', type=float, default=1.0)
     parser.add_argument('--lr_type', type=str, default='step',
                         choices=['step', 'multistep', 'clr', 'groupmultistep'])
     parser.add_argument('--lr_steps', nargs='+', type=str, default=[7],
@@ -111,16 +113,24 @@ def parse_args_training(parser):
     parser.add_argument('--max_epochs', type=int, default=20)
     
     return parser
-    
+
+def parse_args_eval(parser):
+    # Parameters for evaluation during training
+    parser.add_argument('--eval_freq', type=int, default=1)
+    parser.add_argument('--eval_on_train', default=False, action='store_true')
+    # Parameters for evaluation during testing
+    # mfnet
+    parser.add_argument('--mfnet_eval', type=int, default=1)
+    parser.add_argument('--eval_sampler', type=str, default='random', choice=['middle', 'random'])
+    parser.add_argument('--eval_crop', type=str, default='random', choice=['center', 'random'])
+    # lstm
+    parser.add_argument('--save_attentions', default=False, action='store_true')
+
 def parse_args_program(parser):
     # Program parameters
     parser.add_argument('--gpus', nargs='+', type=int, default=[0, 1])
     parser.add_argument('--num_workers', type=int, default=0)
-    parser.add_argument('--eval_freq', type=int, default=1)
-    parser.add_argument('--mfnet_eval', type=int, default=1)
-    parser.add_argument('--eval_on_train', default=False, action='store_true')
     parser.add_argument('--save_all_weights', default=False, action='store_true')
-    parser.add_argument('--save_attentions', default=False, action='store_true')
     parser.add_argument('--logging', default=False, action='store_true')
     parser.add_argument('--resume', default=False, action='store_true')
     parser.add_argument('--resume_from', type=str, default="", help="specify where to resume from otherwise resume from last checkpoint")
@@ -229,6 +239,21 @@ def make_model_name(args, net_type):
     model_name = model_name + args.append_to_model_name
     
     return model_name
+
+def make_log_file_name(output_dir, args):
+    # creates the file name for the evaluation log file or None if no logging is required
+    if args.logging:
+        log_file = os.path.join(output_dir, "results-accuracy-validation")
+        if args.double_output:
+            if 'verb' in args.ckpt_path:
+                log_file = os.path.join(output_dir, "results-accuracy-validation-verb")
+            if 'noun' in args.ckpt_path:
+                log_file = os.path.join(output_dir, "results-accuracy-validation-noun")
+        log_file += args.append_to_model_name
+        log_file += ".txt"
+    else:
+        log_file = None
+    return log_file
 
 def parse_args_train_log_file():
     parser = argparse.ArgumentParser()

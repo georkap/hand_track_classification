@@ -185,8 +185,8 @@ def main():
         else:
             param_new_layers.append(param)
 
-    optimizer = torch.optim.SGD([{'params': param_base_layers, 'lr_mult': 0.2},
-                                 {'params': param_new_layers, 'lr_mult': 1.0}],
+    optimizer = torch.optim.SGD([{'params': param_base_layers, 'lr_mult': args.lr_mult_base},
+                                 {'params': param_new_layers, 'lr_mult': args.lr_mult_new}],
                                 lr=args.lr,
                                 momentum=args.momentum,
                                 weight_decay=args.decay,

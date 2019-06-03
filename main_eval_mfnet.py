@@ -16,7 +16,7 @@ import torchvision.transforms as transforms
 
 from models.mfnet_3d import MFNET_3D
 from models.mfnet_3d_do import MFNET_3D as MFNET_3D_DO
-from utils.argparse_utils import parse_args
+from utils.argparse_utils import parse_args, make_log_file_name
 from utils.file_utils import print_and_save
 from utils.dataset_loader import VideoDatasetLoader
 from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize, CenterCrop
@@ -111,19 +111,13 @@ def main():
     args = parse_args('mfnet', val=True)
     
     output_dir = os.path.dirname(args.ckpt_path)
-    log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
-    if args.double_output and args.logging:
-        if 'verb' in args.ckpt_path:
-            log_file = os.path.join(output_dir, "results-accuracy-validation-verb.txt")
-        if 'noun' in args.ckpt_path:
-            log_file = os.path.join(output_dir, "results-accuracy-validation-noun.txt")
-            
+    log_file = make_log_file_name(output_dir, args)
     print_and_save(args, log_file)
     cudnn.benchmark = True
     
     if not args.double_output:
         mfnet_3d = MFNET_3D
-        num_classes = args.verb_classes 
+        num_classes = args.verb_classes
         validate = validate_resnet
         overall_top1, overall_mean_cls_acc = 0.0, 0.0
     else:
@@ -131,25 +125,27 @@ def main():
         num_classes = (args.verb_classes, args.noun_classes)
         validate = validate_resnet_do
         overall_top1, overall_mean_cls_acc = (0.0, 0.0), (0.0, 0.0)
-        
+
     model_ft = mfnet_3d(num_classes)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
-    checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1':'cuda:0'})
+    checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1': 'cuda:0'})
     model_ft.load_state_dict(checkpoint['state_dict'])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
-    
-    ce_loss = torch.nn.CrossEntropyLoss().cuda()
-    
-    for i in range(args.mfnet_eval):
-        val_sampler = RandomSampling(num=args.clip_length,
-                                     interval=args.frame_interval,
-                                     speed=[1.0, 1.0], seed=i)
-        # val_sampler = MiddleSampling(num=args.clip_length)
 
-        val_transforms = transforms.Compose([Resize((256,256), False), RandomCrop((224,224)),
+    ce_loss = torch.nn.CrossEntropyLoss().cuda()
+
+    for i in range(args.mfnet_eval):
+        crop_type = CenterCrop((224, 224)) if args.eval_crop == 'center' else RandomCrop((224, 224))
+        if args.eval_sampler == 'middle':
+            val_sampler = MiddleSampling(num=args.clip_length)
+        else:
+            val_sampler = RandomSampling(num=args.clip_length,
+                                         interval=args.frame_interval,
+                                         speed=[1.0, 1.0], seed=i)
+
+        val_transforms = transforms.Compose([Resize((256, 256), False), crop_type,
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-        # val_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-        #                                      ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+
         val_loader = VideoDatasetLoader(val_sampler, args.val_list, 
                                         num_classes=num_classes, 
                                         batch_transform=val_transforms,
@@ -161,12 +157,12 @@ def main():
                                                num_workers=args.num_workers,
                                                pin_memory=True)
 
-        top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
-
+        top1, outputs = validate(model_ft, ce_loss, val_iter, checkpoint['epoch'], args.val_list.split("\\")[-1],
+                                 log_file)
 
         if not isinstance(top1, tuple):
             video_preds = [x[0] for x in outputs]
-            video_labels = [x[1] for x in outputs]        
+            video_labels = [x[1] for x in outputs]
             mean_cls_acc, top1_acc = eval_final_print(video_preds, video_labels, "Verbs", args.annotations_path,
                                                       args.val_list, num_classes, log_file)
             overall_mean_cls_acc += mean_cls_acc
@@ -180,14 +176,17 @@ def main():
                                                           args.val_list, num_classes, log_file)
             overall_mean_cls_acc = (overall_mean_cls_acc[0] + mean_cls_acc_a, overall_mean_cls_acc[1] + mean_cls_acc_b)
             overall_top1 = (overall_top1[0] + top1_acc_a, overall_top1[1] + top1_acc_b)
-        
+
     print_and_save("", log_file)
     if not isinstance(top1, tuple):
-        print_and_save("Mean Cls Acc {}".format(overall_mean_cls_acc/args.mfnet_eval), log_file)
-        print_and_save("Dataset Acc ({} times) {}".format(args.mfnet_eval, overall_top1/args.mfnet_eval), log_file)
+        print_and_save("Mean Cls Acc {}".format(overall_mean_cls_acc / args.mfnet_eval), log_file)
+        print_and_save("Dataset Acc ({} times) {}".format(args.mfnet_eval, overall_top1 / args.mfnet_eval), log_file)
     else:
-        print_and_save("Mean Cls Acc a {}, b {}".format(overall_mean_cls_acc[0]/args.mfnet_eval, overall_mean_cls_acc[1]/args.mfnet_eval), log_file)
-        print_and_save("Dataset Acc ({} times) a {}, b {}".format(args.mfnet_eval, overall_top1[0]/args.mfnet_eval, overall_top1[1]/args.mfnet_eval), log_file)
+        print_and_save("Mean Cls Acc a {}, b {}".format(overall_mean_cls_acc[0] / args.mfnet_eval,
+                                                        overall_mean_cls_acc[1] / args.mfnet_eval), log_file)
+        print_and_save("Dataset Acc ({} times) a {}, b {}".format(args.mfnet_eval, overall_top1[0] / args.mfnet_eval,
+                                                                  overall_top1[1] / args.mfnet_eval), log_file)
+
 
 if __name__ == '__main__':
     main()

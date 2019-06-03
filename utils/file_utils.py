@@ -39,7 +39,8 @@ def print_model_config(args, log_file):
     to_print += "Name {}\nTo train on {}\nTo test on {}\n".format(args.model_name, args.train_list, args.test_list)
     to_print += "Output will be saved at {}\n".format(os.path.join(args.base_output_dir, args.model_name))
     print_and_save(to_print, log_file)
-    
+
+
 def get_eval_results(lines, test_set):
     epochs = [int(line.strip().split(":")[1]) for line in lines if line.startswith("Beginning")]
     res = [line.strip() for line in lines if line.startswith(test_set)]

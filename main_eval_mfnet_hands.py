@@ -14,7 +14,7 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
 from models.mfnet_3d_hands import MFNET_3D
-from utils.argparse_utils import parse_args
+from utils.argparse_utils import parse_args, make_log_file_name
 from utils.file_utils import print_and_save
 from utils.dataset_loader import VideoAndPointDatasetLoader
 from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize, CenterCrop
@@ -94,13 +94,7 @@ def main():
     args = parse_args('mfnet', val=True)
 
     output_dir = os.path.dirname(args.ckpt_path)
-    log_file = os.path.join(output_dir, "results-accuracy-validation.txt") if args.logging else None
-    if args.double_output and args.logging:
-        if 'verb' in args.ckpt_path:
-            log_file = os.path.join(output_dir, "results-accuracy-validation-verb.txt")
-        if 'noun' in args.ckpt_path:
-            log_file = os.path.join(output_dir, "results-accuracy-validation-noun.txt")
-
+    log_file = make_log_file_name(output_dir, args)
     print_and_save(args, log_file)
     cudnn.benchmark = True
 
@@ -124,14 +118,16 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda()
 
     for i in range(args.mfnet_eval):
-        val_sampler = RandomSampling(num=args.clip_length,
-                                     interval=args.frame_interval,
-                                     speed=[1.0, 1.0], seed=i)
-        # val_sampler = MiddleSampling(num=args.clip_length)
-        val_transforms = transforms.Compose([Resize((256, 256), False), RandomCrop((224, 224)),
+        crop_type = CenterCrop((224, 224)) if args.eval_crop == 'center' else RandomCrop((224, 224))
+        if args.eval_sampler == 'middle':
+            val_sampler = MiddleSampling(num=args.clip_length)
+        else:
+            val_sampler = RandomSampling(num=args.clip_length,
+                                         interval=args.frame_interval,
+                                         speed=[1.0, 1.0], seed=i)
+
+        val_transforms = transforms.Compose([Resize((256, 256), False), crop_type,
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-        # val_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-        #                                      ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
         val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list, point_list_prefix=args.bpv_prefix,
                                                 num_classes=args.verb_classes, img_tmpl='frame_{:010d}.jpg',
