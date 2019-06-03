@@ -10,7 +10,6 @@ Image dataset loader for a .txt file with a sample per line in the format
 
 import os
 import pickle
-from typing import Optional, List, Any, Union, Tuple
 
 import cv2
 import numpy as np
@@ -20,7 +19,7 @@ from utils.video_sampler import RandomSampling, SequentialSampling
 
 
 def get_class_weights(list_file, num_classes, use_mapping):
-    samples_list = parse_samples_list(list_file)
+    samples_list = parse_samples_list(list_file, DataLine)
     counts = np.zeros(num_classes)
     mapping = None
     if use_mapping:
@@ -47,9 +46,17 @@ def make_class_mapping(samples_list):
         mapping_dict[c] = i
     return mapping_dict
 
-
-def parse_samples_list(list_file):
-    return [DataLine(x.strip().split(' ')) for x in open(list_file)]
+def make_class_mapping_generic(samples_list, attribute):
+    classes = []
+    for sample in samples_list:
+        label = getattr(sample, attribute)
+        if label not in classes:
+            classes.append(label)
+    classes = np.sort(classes)
+    mapping_dict = {}
+    for i, c in enumerate(classes):
+        mapping_dict[c] = i
+    return mapping_dict
 
 
 def load_pickle(tracks_path):
@@ -183,11 +190,54 @@ class DataLine(object):
         return int(self.data[5] if len(self.data) == 6 else -1)
 
 
+class GTEADataLine(object):
+    def __init__(self, row):
+        self.data = row
+        self.data_len = len(row)
+
+    def get_video_path(self, prefix):
+        return os.path.join(prefix, self.id_recipe, self.data_path + '.mp4')
+
+    @property
+    def data_path(self):
+        return self.data[0]
+
+    @property
+    def id_recipe(self):
+        name_parts = self.data[0].split('-')
+        id_recipe = name_parts[0] + '-' + name_parts[1] + '-' + name_parts[2]
+        return id_recipe
+
+    @property
+    def label_action(self): # to zero based labels
+        return int(self.data[1]) - 1 
+
+    @property
+    def label_verb(self):
+        return int(self.data[2]) - 1 
+
+    @property
+    def label_noun(self):
+        return int(self.data[3]) - 1
+
+    @property
+    def extra_nouns(self):
+        extra_nouns = list()
+        if self.data_len > 4:
+            for noun in self.data[4:]:
+                extra_nouns.append(int(noun) - 1)
+        return extra_nouns
+
+
+def parse_samples_list(list_file, datatype):
+    return [datatype(x.strip().split(' ')) for x in open(list_file)]
+
+
 class ImageDatasetLoader(torchDataset):
 
     def __init__(self, list_file, num_classes=120,
                  batch_transform=None, channels='RGB', validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         if num_classes != 120:
             self.mapping = make_class_mapping(self.samples_list)
         else:
@@ -220,12 +270,221 @@ class ImageDatasetLoader(torchDataset):
             return img, class_id, name_parts[-2] + "\\" + name_parts[-1]
 
 
+class Video(object):
+    # adapted from https://github.com/cypw/PyTorch-MFNet/blob/master/data/video_iterator.py
+    """basic Video class"""
+
+    def __init__(self, vid_path):
+        self.open(vid_path)
+
+    def __del__(self):
+        self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.__del__()
+
+    def reset(self):
+        self.close()
+        self.vid_path = None
+        self.frame_count = -1
+        self.faulty_frame = None
+        return self
+
+    def open(self, vid_path):
+        assert os.path.exists(vid_path), "VideoIter:: cannot locate: `{}'".format(vid_path)
+
+        # close previous video & reset variables
+        self.reset()
+
+        # try to open video
+        cap = cv2.VideoCapture(vid_path)
+        if cap.isOpened():
+            self.cap = cap
+            self.vid_path = vid_path
+        else:
+            raise IOError("VideoIter:: failed to open video: `{}'".format(vid_path))
+
+        return self
+
+    def count_frames(self, check_validity=False):
+        offset = 0
+        if self.vid_path.endswith('.flv'):
+            offset = -1
+        unverified_frame_count = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT)) + offset
+        if check_validity:
+            verified_frame_count = 0
+            for i in range(unverified_frame_count):
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, i)
+                if not self.cap.grab():
+                    print("VideoIter:: >> frame (start from 0) {} corrupted in {}".format(i, self.vid_path))
+                    break
+                verified_frame_count = i + 1
+            self.frame_count = verified_frame_count
+        else:
+            self.frame_count = unverified_frame_count
+        assert self.frame_count > 0, "VideoIter:: Video: `{}' has no frames".format(self.vid_path)
+        return self.frame_count
+
+    def extract_frames(self, idxs, force_color=True):
+        frames = self.extract_frames_fast(idxs, force_color)
+        if frames is None:
+            # try slow method:
+            frames = self.extract_frames_slow(idxs, force_color)
+        return frames
+
+    def extract_frames_fast(self, idxs, force_color=True):
+        assert self.cap is not None, "No opened video."
+        if len(idxs) < 1:
+            return []
+
+        frames = []
+        pre_idx = max(idxs)
+        for idx in idxs:
+            assert (self.frame_count < 0) or (idx < self.frame_count), \
+                "idxs: {} > total valid frames({})".format(idxs, self.frame_count)
+            if pre_idx != (idx - 1):
+                self.cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            res, frame = self.cap.read() # in BGR/GRAY format
+            pre_idx = idx
+            if not res:
+                self.faulty_frame = idx
+                return None
+            if len(frame.shape) < 3:
+                if force_color:
+                    # Convert Gray to RGB
+                    frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+            else:
+                # Convert BGR to RGB
+                frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frames.append(frame)
+        return frames
+
+    def extract_frames_slow(self, idxs, force_color=True):
+        assert self.cap is not None, "No opened video."
+        if len(idxs) < 1:
+            return []
+
+        frames = [None] * len(idxs)
+        idx = min(idxs)
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        while idx <= max(idxs):
+            res, frame = self.cap.read() # in BGR/GRAY format
+            if not res:
+                # end of the video
+                self.faulty_frame = idx
+                return None
+            if idx in idxs:
+                # fond a frame
+                if len(frame.shape) < 3:
+                    if force_color:
+                        # Convert Gray to RGB
+                        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2RGB)
+                else:
+                    # Convert BGR to RGB
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pos = [k for k, i in enumerate(idxs) if i == idx]
+                for k in pos:
+                    frames[k] = frame
+            idx += 1
+        return frames
+
+    def close(self):
+        if hasattr(self, 'cap') and self.cap is not None:
+            self.cap.release()
+            self.cap = None
+        return self
+
+
+class FromVideoDatasetLoader(torchDataset):
+    OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
+    def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None, validation=False, vis_data=False):
+        self.sampler = sampler
+        self.video_list = parse_samples_list(split_file, GTEADataLine)  # if line_type=='GTEA' else DataLine)
+
+        # num_classes is a list with 3 integers.
+        # num_classes[0] = num_actions,
+        # num_classes[1] = num_verbs,
+        # num_classes[2] = num_nouns
+        # if any of these has the value <= 0 then this objective will not be used in the network
+        # if any of these has value different than its respective on max_num_classes then I perform class mapping
+        # max_num_classes is a list with 3 integers which define the maximum number of classes for the objective and is
+        # fixed for certain dataset. E.g. for EPIC it is [0, 125, 322], for GTEA it is [106, 19, 53]
+        self.usable_objectives = list()
+        self.mappings = list()
+        for i, (objective, objective_name) in enumerate(zip(num_classes, FromVideoDatasetLoader.OBJECTIVE_NAMES)):
+            self.usable_objectives.append(objective > 0)
+            if objective != max_num_classes[i] and objective > 0:
+                self.mappings.append(make_class_mapping_generic(self.video_list, objective_name))
+            else:
+                self.mappings.append(None)
+        assert any(obj is True for obj in self.usable_objectives)
+        self.transform = batch_transform
+        self.validation = validation
+        self.vis_data = vis_data
+
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, index):
+        sampled_frames = []
+        try:
+            with Video(vid_path=self.video_list[index].get_video_path(prefix='gtea_clips')) as vid:
+                start_frame = 0
+                frame_count = vid.count_frames(check_validity=False)
+                sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index, start_frame=start_frame)
+                sampled_frames = vid.extract_frames(idxs=sampled_idxs, force_color=True)
+        except IOError as e:
+            print(">> I/O error({0}): {1}".format(e.errno, e.strerror))
+
+        clip_input = np.concatenate(sampled_frames, axis=2)
+
+        if self.transform is not None:
+            clip_input = self.transform(clip_input)
+
+        action_id = self.video_list[index].label_action
+        verb_id = self.video_list[index].label_verb
+        noun_id = self.video_list[index].label_noun
+        extra_nouns = self.video_list[index].extra_nouns
+        if self.mappings[0]:
+            action_id = self.mappings[0][action_id]
+        if self.mappings[1]:
+            verb_id = self.mappings[1][verb_id]
+        if self.mappings[2]:
+            noun_id = self.mappings[2][noun_id]
+            extra_nouns = [self.mappings[2][en] for en in extra_nouns]
+        labels = list()
+        if self.usable_objectives[0]:
+            labels.append(action_id)
+        if self.usable_objectives[1]:
+            labels.append(verb_id)
+        if self.usable_objectives[2]:
+            labels.append(noun_id)
+            for en in extra_nouns:
+                labels.append(en)
+        labels = np.array(labels, dtype=np.int64) # for pytorch dataloader compatibility
+
+        if self.vis_data:
+            for i in range(len(sampled_frames)):
+                cv2.imshow('orig_img', sampled_frames[i])
+                cv2.imshow('transform', clip_input[:,i,:,:].numpy().transpose(1,2,0))
+                cv2.waitKey(0)
+
+        if not self.validation:
+            return clip_input, labels
+        else:
+            return clip_input, labels, self.video_list[index].data_path
+
+
+
 class VideoDatasetLoader(torchDataset):
 
     def __init__(self, sampler, list_file, num_classes=120,
                  img_tmpl='img_{:05d}.jpg', batch_transform=None, validation=False):
         self.sampler = sampler
-        self.video_list = parse_samples_list(list_file)
+        self.video_list = parse_samples_list(list_file, DataLine)
 
         # check for double output and choose as first the verb classes
         if not isinstance(num_classes, tuple):
@@ -265,7 +524,7 @@ class VideoDatasetLoader(torchDataset):
             verb_id = self.video_list[index].label_verb
         if self.double_output:
             noun_id = self.video_list[index].label_noun
-            classes = (verb_id, noun_id)
+            classes = (verb_id, noun_id) # np.array([verb_id, noun_id], dtype=np.int64) should refactor to this for double output
         else:
             classes = verb_id
 
@@ -279,7 +538,7 @@ class VideoDatasetLoader(torchDataset):
 class PointPolarDatasetLoaderMultiSec(torchDataset):
     def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.max_seq_length = max_seq_length
@@ -300,7 +559,7 @@ class PointPolarDatasetLoaderMultiSec(torchDataset):
 class PointDiffDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         self.norm_val = np.array(norm_val)
         self.max_seq_length = max_seq_length
         self.validation = validation
@@ -330,7 +589,7 @@ class PointDiffDatasetLoader(torchDataset):
 
 class AnglesDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length=None, validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         # no mapping supported for now. only use all classes
         self.max_seq_length = max_seq_length
         self.validation = validation
@@ -361,7 +620,7 @@ class PointPolarDatasetLoader(torchDataset):
 
     def __init__(self, list_file, max_seq_length=None, norm_val=None,
                  validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.max_seq_length = max_seq_length
@@ -404,7 +663,7 @@ class PointPolarDatasetLoader(torchDataset):
 class PointObjDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length, double_output,
                  norm_val=None, bpv_prefix='noun_bpv_oh', validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
@@ -449,7 +708,7 @@ class PointObjDatasetLoader(torchDataset):
 class PointBpvDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length, double_output,
                  norm_val=None, bpv_prefix='noun_bpv_oh', validation=False, num_workers=0):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         # no mapping supported for now. only use all classes
         self.norm_val = np.array(norm_val)
         self.validation = validation
@@ -505,7 +764,7 @@ class PointDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120,
                  batch_transform=None, norm_val=None, dual=False,
                  clamp=False, only_left=False, only_right=False, validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         if num_classes != 120 and num_classes != 125:  # TODO: find a better way to apply mapping
             self.mapping = make_class_mapping(self.samples_list)
         else:
@@ -567,7 +826,7 @@ class VideoAndPointDatasetLoader(torchDataset):
     def __init__(self, sampler, video_list_file, point_list_prefix, num_classes=120, img_tmpl='img_{:05d}.jpg',
                  norm_val=None, batch_transform=None, validation=False, vis_data=False):
         self.sampler = sampler
-        self.video_list = parse_samples_list(video_list_file)
+        self.video_list = parse_samples_list(video_list_file, DataLine)
         if num_classes != 120 and num_classes != 125:
             self.mapping = make_class_mapping(self.video_list)
         else:
@@ -687,7 +946,7 @@ class VideoAndPointDatasetLoader(torchDataset):
 class PointVectorSummedDatasetLoader(torchDataset):
     def __init__(self, list_file, max_seq_length=None, num_classes=120,
                  dual=False, validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         if num_classes != 120:
             self.mapping = make_class_mapping(self.samples_list)
         else:
@@ -747,7 +1006,7 @@ class PointImageDatasetLoader(torchDataset):
 
     def __init__(self, list_file, batch_transform=None, norm_val=None,
                  validation=False):
-        self.samples_list = parse_samples_list(list_file)
+        self.samples_list = parse_samples_list(list_file, DataLine)
         self.transform = batch_transform
         self.norm_val = np.array(norm_val)
         self.validation = validation
@@ -788,9 +1047,10 @@ class PointImageDatasetLoader(torchDataset):
 if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd\epic_rgb_train_1.txt"
     # video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_brd\epic_rgb_train_1.txt"
-    video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
+    #video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
-    point_list_prefix = 'hand_detection_tracks_lr001'
+    #point_list_prefix = 'hand_detection_tracks_lr001'
+    video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split1.txt"
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
@@ -808,9 +1068,10 @@ if __name__=='__main__':
          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
     val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=seed)
-    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
-                                        img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
-                                        batch_transform=train_transforms, vis_data=True)
+    # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
+    #                                     img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
+    #                                     batch_transform=train_transforms, vis_data=True)
+    loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [1, 1, 0], [106, 19, 53], batch_transform=train_transforms, validation=True, vis_data=True)
 
     for i in range(len(loader)):
         item = loader.__getitem__(i)

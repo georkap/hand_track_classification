@@ -161,6 +161,29 @@ def save_best_checkpoint(top1, new_top1, output_dir, model_name, weight_file):
     return top1
 
 
+def save_mt_checkpoints(model_ft, optimizer, top1, new_top1, save_all_weights, output_dir, model_name, epoch, log_file):
+    if save_all_weights:
+        weight_file = os.path.join(output_dir, model_name + '_{:03d}.pth'.format(epoch))
+    else:
+        weight_file = os.path.join(output_dir, model_name + '_ckpt.pth')
+
+    save_dict = dict()
+    save_dict['epoch'] = epoch
+    save_dict['state_dict'] = model_ft.state_dict()
+    save_dict['optimizer'] = optimizer.state_dict()
+    for ind in range(len(new_top1)):
+        save_dict['top1_{}'.format(ind)] = new_top1[ind]
+
+    torch.save(save_dict, weight_file)
+
+    cur_top1s = list()
+    for ind in range(len(new_top1)):
+        tasktop1 = save_best_checkpoint(top1[ind], new_top1[ind], output_dir, model_name + "_task{}".format(ind), weight_file)
+        cur_top1s.append(tasktop1)
+
+    return cur_top1s
+
+
 def save_checkpoints(model_ft, optimizer, top1, new_top1,
                      save_all_weights, output_dir, model_name, epoch, log_file):
     if save_all_weights:

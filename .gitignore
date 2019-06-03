@@ -112,6 +112,7 @@ tracked_noun_bpv_oh_mh0
 cln_noun_tracks_mh0
 temp_parsers*
 runs*
+gtea_clips
 
 # Project specific python scripts
 batch_*

@@ -31,6 +31,7 @@ def make_base_parser(val):
     
 def parse_args_dataset(parser, net_type):
     # Dataset parameters
+    parser.add_argument('--action_classes', type=int, default=106) # only for gtea
     parser.add_argument('--verb_classes', type=int, default=120)
     parser.add_argument('--noun_classes', type=int, default=322)
     parser.add_argument('--batch_size', type=int, default=1)
@@ -90,7 +91,8 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--only_right', default=False, action='store_true')
         
     parser.add_argument('--double_output', default=False, action='store_true')
-    
+    parser.add_argument('--multi_task', default=False, action='store_true')
+
     return parser
     
 def parse_args_training(parser):
@@ -233,8 +235,10 @@ def make_model_name(args, net_type):
         clr_type = "tri" if args.lr_steps[4] == "triangular" else "tri2" if args.lr_steps[4] == "triangular2" else "exp"
         model_name = model_name + "_{}".format(clr_type)
         model_name = model_name + str(args.lr_steps[0]).split('.')[0] + str(args.lr_steps[0]).split('.')[1] + '-' + str(args.lr_steps[1]).split('.')[0] + str(args.lr_steps[1]).split('.')[1]
+    if args.multi_task:
+        model_name = model_name + "_asel{}".format(args.action_classes)
     model_name = model_name + "_vsel{}".format(args.verb_classes)
-    if args.double_output:
+    if args.double_output or args.multi_task:
         model_name = model_name + "_nsel{}".format(args.noun_classes)
     if args.mixup_a != 1.:
         model_name = model_name + "_mixup" 
