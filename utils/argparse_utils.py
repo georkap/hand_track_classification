@@ -121,8 +121,8 @@ def parse_args_eval(parser):
     # Parameters for evaluation during testing
     # mfnet
     parser.add_argument('--mfnet_eval', type=int, default=1)
-    parser.add_argument('--eval_sampler', type=str, default='random', choice=['middle', 'random'])
-    parser.add_argument('--eval_crop', type=str, default='random', choice=['center', 'random'])
+    parser.add_argument('--eval_sampler', type=str, default='random', choices=['middle', 'random'])
+    parser.add_argument('--eval_crop', type=str, default='random', choices=['center', 'random'])
     # lstm
     parser.add_argument('--save_attentions', default=False, action='store_true')
 
