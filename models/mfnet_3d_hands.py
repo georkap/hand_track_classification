@@ -20,7 +20,7 @@ from utils import initializer
 
 class CoordRegressionLayer(nn.Module):
     def __init__(self, input_filters, n_locations):
-        super().__init__()
+        super().__init__() #super(CoordRegressionLayer, self).__init__()
         self.hm_conv = nn.Conv3d(input_filters, n_locations, kernel_size=1, bias=False)
 
     def forward(self, h):

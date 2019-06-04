@@ -19,6 +19,20 @@ import torch.nn as nn
 from utils import initializer
 
 
+class MultitaskClassifiers(nn.Module):
+    def __init__(self, last_conv_size, num_classes):
+        super(MultitaskClassifiers, self).__init__()
+        self.num_classes = [num_cls for num_cls in num_classes if num_cls > 0]
+        self.classifier_list = nn.ModuleList(
+            [nn.Linear(last_conv_size, num_cls) for num_cls in self.num_classes])
+
+    def forward(self, h):
+        h_out = []
+        for i, cl in enumerate(self.classifier_list):
+            h_out.append(cl(h))
+
+        return h_out
+
 class BN_AC_CONV3D(nn.Module):
 
     def __init__(self, num_in, num_filter,
@@ -156,9 +170,12 @@ class MFNET_3D(nn.Module):
                             # ('dropout', nn.Dropout(p=0.5)), only for fine-tuning
                             ]))
 
-        for i, num_cls in enumerate(num_classes):
-            if num_cls > 0:
-                setattr(self, 'classifier{}'.format(i), nn.Linear(conv5_num_out, num_cls))
+        # self.classifier = nn.Linear(conv5_num_out, num_classes[0])
+        self.classifier_list = MultitaskClassifiers(conv5_num_out, num_classes)
+        #self.classifier_list = nn.ModuleList([nn.Linear(conv5_num_out, num_cls) for num_cls in num_classes if num_cls > 0])
+        # for i, num_cls in enumerate(num_classes):
+        #     if num_cls > 0:
+        #         setattr(self, 'classifier{}'.format(i), nn.Linear(conv5_num_out, num_cls))
 
         #############
         # Initialization
@@ -190,10 +207,19 @@ class MFNET_3D(nn.Module):
         h = self.globalpool(h)
 
         h = h.view(h.shape[0], -1)
-        h_out = list()
-        for i, num_cls in enumerate(self.num_classes):
-            if num_cls > 0:
-                h_out.append(getattr(self, 'classifier{}'.format(i))(*[h]))
+
+
+        # h_out = self.classifier(h)
+        h_out = self.classifier_list(h)
+        # h_out = []
+        # for i, cl in enumerate(self.classifier_list):
+        #     h_out.append(cl(h))
+        # h_out = list()
+        # for i, num_cls in enumerate(self.num_classes):
+        #     if num_cls > 0:
+        #         h_out.append(getattr(self, 'classifier{}'.format(i)))
+
+
 
         return h_out
 

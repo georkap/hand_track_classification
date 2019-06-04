@@ -47,8 +47,12 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, cur_e
 
         outputs = model(inputs)
 
-        losses_per_task = [criterion(output, target) for output, target in zip(outputs, targets)]
-        loss = torch.sum(torch.tensor(losses_per_task, requires_grad=True).cuda())
+        losses_per_task = []
+        for output, target in zip(outputs, targets):
+            loss_for_task = criterion(output, target)
+            losses_per_task.append(loss_for_task)
+
+        loss = sum(losses_per_task)
 
         optimizer.zero_grad()
         loss.backward()
