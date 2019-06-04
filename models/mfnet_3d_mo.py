@@ -157,7 +157,8 @@ class MFNET_3D(nn.Module):
                             ]))
 
         for i, num_cls in enumerate(num_classes):
-            setattr(self, 'classifier{}'.format(i), nn.Linear(conv5_num_out, num_cls))
+            if num_cls > 0:
+                setattr(self, 'classifier{}'.format(i), nn.Linear(conv5_num_out, num_cls))
 
         #############
         # Initialization
@@ -191,7 +192,8 @@ class MFNET_3D(nn.Module):
         h = h.view(h.shape[0], -1)
         h_out = list()
         for i, num_cls in enumerate(self.num_classes):
-            h_out.append(getattr(self, 'classifier{}'.format(i))(*[h]))
+            if num_cls > 0:
+                h_out.append(getattr(self, 'classifier{}'.format(i))(*[h]))
 
         return h_out
 

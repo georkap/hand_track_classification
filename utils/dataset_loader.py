@@ -400,9 +400,11 @@ class Video(object):
 
 class FromVideoDatasetLoader(torchDataset):
     OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
-    def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None, validation=False, vis_data=False):
+    def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None, extra_nouns=False,
+                 validation=False, vis_data=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(split_file, GTEADataLine)  # if line_type=='GTEA' else DataLine)
+        self.extra_nouns = extra_nouns
 
         # num_classes is a list with 3 integers.
         # num_classes[0] = num_actions,
@@ -416,7 +418,7 @@ class FromVideoDatasetLoader(torchDataset):
         self.mappings = list()
         for i, (objective, objective_name) in enumerate(zip(num_classes, FromVideoDatasetLoader.OBJECTIVE_NAMES)):
             self.usable_objectives.append(objective > 0)
-            if objective != max_num_classes[i] and objective > 0:
+            if objective != max_num_classes[i] and self.usable_objectives[-1]:
                 self.mappings.append(make_class_mapping_generic(self.video_list, objective_name))
             else:
                 self.mappings.append(None)
@@ -444,26 +446,30 @@ class FromVideoDatasetLoader(torchDataset):
         if self.transform is not None:
             clip_input = self.transform(clip_input)
 
-        action_id = self.video_list[index].label_action
-        verb_id = self.video_list[index].label_verb
-        noun_id = self.video_list[index].label_noun
-        extra_nouns = self.video_list[index].extra_nouns
-        if self.mappings[0]:
-            action_id = self.mappings[0][action_id]
-        if self.mappings[1]:
-            verb_id = self.mappings[1][verb_id]
-        if self.mappings[2]:
-            noun_id = self.mappings[2][noun_id]
-            extra_nouns = [self.mappings[2][en] for en in extra_nouns]
         labels = list()
         if self.usable_objectives[0]:
+            action_id = self.video_list[index].label_action
+            if self.mappings[0]:
+                action_id = self.mappings[0][action_id]
             labels.append(action_id)
         if self.usable_objectives[1]:
+            verb_id = self.video_list[index].label_verb
+            if self.mappings[1]:
+                verb_id = self.mappings[1][verb_id]
             labels.append(verb_id)
         if self.usable_objectives[2]:
+            noun_id = self.video_list[index].label_noun
+            if self.mappings[2]:
+                noun_id = self.mappings[2][noun_id]
             labels.append(noun_id)
-            for en in extra_nouns:
-                labels.append(en)
+
+            if self.extra_nouns:
+                extra_nouns = self.video_list[index].extra_nouns
+                if self.mappings[2]:
+                    extra_nouns = [self.mappings[2][en] for en in extra_nouns]
+                for en in extra_nouns:
+                    labels.append(en)
+
         labels = np.array(labels, dtype=np.int64) # for pytorch dataloader compatibility
 
         if self.vis_data:
@@ -1071,7 +1077,8 @@ if __name__=='__main__':
     # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
     #                                     img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
     #                                     batch_transform=train_transforms, vis_data=True)
-    loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [1, 1, 0], [106, 19, 53], batch_transform=train_transforms, validation=True, vis_data=True)
+    loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
+                                    extra_nouns=False, validation=True, vis_data=False)
 
     for i in range(len(loader)):
         item = loader.__getitem__(i)

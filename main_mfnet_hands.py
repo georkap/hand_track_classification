@@ -177,7 +177,7 @@ def main():
     name_base_layers = []
     for name, param in model_ft.named_parameters():
         if args.pretrained:
-            if name.startswith('classifier'):
+            if 'classifier' in name:
                 param_new_layers.append(param)
             else:
                 param_base_layers.append(param)

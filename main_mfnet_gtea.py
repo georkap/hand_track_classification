@@ -112,7 +112,7 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, cur_epoch, dataset
 
         final_print = '{} Results: Loss {:.3f},'.format(dataset, losses.avg)
         for ind in range(num_outputs):
-            final_print += 'T{}::Top1 {:.3f}, Top5 {:.3f}'.format(ind, top1_meters[ind].avg, top5_meters[ind].avg)
+            final_print += 'T{}::Top1 {:.3f}, Top5 {:.3f},'.format(ind, top1_meters[ind].avg, top5_meters[ind].avg)
         print_and_save(final_print, log_file)
     return [tasktop1.avg for tasktop1 in top1_meters]
 
@@ -127,15 +127,14 @@ def main():
     
     mfnet_3d = MFNET_3D_MO # mfnet 3d multi output
     objectives_text = "Objectives: "
-    num_classes = list()
+    num_classes = [args.action_classes, args.verb_classes, args.noun_classes]
     if args.action_classes > 0:
-        num_classes.append(args.action_classes)
         objectives_text += " actions {}, ".format(args.action_classes)
     if args.verb_classes > 0:
-        num_classes.append(args.verb_classes)
+        # num_classes.append(args.verb_classes)
         objectives_text += " verbs {}, ".format(args.verb_classes)
     if args.noun_classes > 0:
-        num_classes.append(args.noun_classes)
+        # num_classes.append(args.noun_classes)
         objectives_text += " nouns {}, ".format(args.noun_classes)
     print_and_save("Training for {} objective(s)".format(len(num_classes)), log_file)
     print_and_save(objectives_text, log_file)
@@ -158,7 +157,7 @@ def main():
             RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
             ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     train_loader = FromVideoDatasetLoader(train_sampler, args.train_list, 'GTEA', num_classes, GTEA_CLASSES,
-                                          batch_transform=train_transforms)
+                                          batch_transform=train_transforms, extra_nouns=False)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
@@ -167,7 +166,7 @@ def main():
     test_transforms=transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     test_loader = FromVideoDatasetLoader(test_sampler, args.test_list, 'GTEA', num_classes, GTEA_CLASSES,
-                                         batch_transform=test_transforms)
+                                         batch_transform=test_transforms, extra_nouns=False)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
@@ -178,7 +177,9 @@ def main():
     name_base_layers = []
     for name, param in model_ft.named_parameters():
         if args.pretrained:
-            if name.startswith('classifier'):
+            # changing from startswith to this, because 'module' is added to the name of the parameter,
+            # so the if clause doesn't work for multigpu training
+            if 'classifier' in name:
                 param_new_layers.append(param)
             else:
                 param_base_layers.append(param)
@@ -201,13 +202,14 @@ def main():
 
     train = train_cnn_mo
     test = test_cnn_mo
-    new_top1, top1 = [0.0] * len(num_classes), [0.0] * len(num_classes)
+    num_valid_classes = len([cls for cls in num_classes if cls > 0])
+    new_top1, top1 = [0.0] * num_valid_classes, [0.0] * num_valid_classes
     for epoch in range(args.max_epochs):
-        train(model_ft, optimizer, ce_loss, train_iterator, len(num_classes), epoch, log_file, args.gpus, lr_scheduler)
+        train(model_ft, optimizer, ce_loss, train_iterator, num_valid_classes, epoch, log_file, args.gpus, lr_scheduler)
         if (epoch+1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test(model_ft, ce_loss, train_iterator, len(num_classes), epoch, "Train", log_file, args.gpus)
-            new_top1 = test(model_ft, ce_loss, test_iterator, len(num_classes), epoch, "Test", log_file, args.gpus)
+                test(model_ft, ce_loss, train_iterator, num_valid_classes, epoch, "Train", log_file, args.gpus)
+            new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, epoch, "Test", log_file, args.gpus)
             top1 = save_mt_checkpoints(model_ft, optimizer, top1, new_top1,
                                        args.save_all_weights, output_dir, model_name, epoch, log_file)
             
