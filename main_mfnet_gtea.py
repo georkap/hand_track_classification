@@ -79,7 +79,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, cur_e
                 ind, top1_meters[ind].val, top1_meters[ind].avg, top5_meters[ind].val, top5_meters[ind].avg)
         to_print += 'LR {:.6f}'.format(lr_scheduler.get_lr()[0])
         print_and_save(to_print, log_file)
-    print_and_save("Epoch train time: {}".format(batch_time.sum))
+    print_and_save("Epoch train time: {}".format(batch_time.sum), log_file)
 
 def test_cnn_mo(model, criterion, test_iterator, num_outputs, cur_epoch, dataset, log_file, gpus):
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
