@@ -83,11 +83,12 @@ def load_point_samples(samples_list, bpv_prefix=None):
         data_arr = [load_pickle(samples_list[index].data_path) for index in range(len(samples_list))]
     return data_arr
 
-
+# from PIL import Image
 def load_images(data_path, frame_indices, image_tmpl):
     images = []
     for f_ind in frame_indices:
         im_name = os.path.join(data_path, image_tmpl.format(f_ind))
+        # next_image = np.array(Image.open(im_name).convert('RGB'))
         next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
         next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
         images.append(next_image)
@@ -396,6 +397,98 @@ class Video(object):
             self.cap.release()
             self.cap = None
         return self
+
+from gulpio import GulpDirectory
+class FromVideoDatasetLoaderGulp(torchDataset):
+    OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
+    def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None, extra_nouns=False,
+                 validation=False, vis_data=False):
+        self.sampler = sampler
+        self.video_list = parse_samples_list(split_file, GTEADataLine)  # if line_type=='GTEA' else DataLine)
+        self.extra_nouns = extra_nouns
+        self.usable_objectives = list()
+        self.mappings = list()
+        for i, (objective, objective_name) in enumerate(zip(num_classes, FromVideoDatasetLoader.OBJECTIVE_NAMES)):
+            self.usable_objectives.append(objective > 0)
+            if objective != max_num_classes[i] and self.usable_objectives[-1]:
+                self.mappings.append(make_class_mapping_generic(self.video_list, objective_name))
+            else:
+                self.mappings.append(None)
+        assert any(obj is True for obj in self.usable_objectives)
+        self.transform = batch_transform
+        self.validation = validation
+        self.vis_data = vis_data
+
+        # gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
+        gulp_data_dir = r"D:\Datasets\gteagulp"
+        self.gd = GulpDirectory(gulp_data_dir)
+        self.items = list(self.gd.merged_meta_dict.items())
+        self.num_chunks = self.gd.num_chunks
+        self.data_path = gulp_data_dir
+
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, index):
+        item_id, item_info = self.items[index]
+        assert item_id == self.video_list[index].data_path
+        frame_count = len(item_info['frame_info'])
+        assert frame_count > 0
+
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index, start_frame=0)
+        # sampled_idxs = [10,11,13,14,15,15,15,15]
+        sampler_step = self.sampler.interval
+        produced_step = np.mean(sampled_idxs[1:] - np.roll(sampled_idxs,1)[1:])
+        if sampler_step[0] == produced_step:
+            sampled_frames, meta = self.gd[item_id, slice(sampled_idxs[0], sampled_idxs[-1]+1, sampler_step[0])]
+        else:
+            imgs, meta = self.gd[item_id]
+            assert sampled_idxs[-1] < len(imgs)
+            sampled_frames = []
+            for i in sampled_idxs:
+                sampled_frames.append(imgs[i])
+
+        clip_input = np.concatenate(sampled_frames, axis=2)
+
+        if self.transform is not None:
+            clip_input = self.transform(clip_input)
+
+        labels = list()
+        if self.usable_objectives[0]:
+            action_id = self.video_list[index].label_action
+            if self.mappings[0]:
+                action_id = self.mappings[0][action_id]
+            labels.append(action_id)
+        if self.usable_objectives[1]:
+            verb_id = self.video_list[index].label_verb
+            if self.mappings[1]:
+                verb_id = self.mappings[1][verb_id]
+            labels.append(verb_id)
+        if self.usable_objectives[2]:
+            noun_id = self.video_list[index].label_noun
+            if self.mappings[2]:
+                noun_id = self.mappings[2][noun_id]
+            labels.append(noun_id)
+
+            if self.extra_nouns:
+                extra_nouns = self.video_list[index].extra_nouns
+                if self.mappings[2]:
+                    extra_nouns = [self.mappings[2][en] for en in extra_nouns]
+                for en in extra_nouns:
+                    labels.append(en)
+
+        labels = np.array(labels, dtype=np.int64)  # for pytorch dataloader compatibility
+
+        if self.vis_data:
+            for i in range(len(sampled_frames)):
+                cv2.imshow('orig_img', sampled_frames[i])
+                cv2.imshow('transform', clip_input[:, i, :, :].numpy().transpose(1, 2, 0))
+                cv2.waitKey(0)
+
+        if not self.validation:
+            return clip_input, labels
+        else:
+            return clip_input, labels, self.video_list[index].data_path
 
 
 class FromVideoDatasetLoader(torchDataset):
@@ -1077,8 +1170,11 @@ if __name__=='__main__':
     # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
     #                                     img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
     #                                     batch_transform=train_transforms, vis_data=True)
-    loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
-                                    extra_nouns=False, validation=True, vis_data=False)
+    # loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
+    #                                 extra_nouns=False, validation=True, vis_data=False)
+    loader = FromVideoDatasetLoaderGulp(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
+                                        batch_transform=train_transforms, extra_nouns=False,
+                                        validation=True, vis_data=False)
 
     for i in range(len(loader)):
         item = loader.__getitem__(i)

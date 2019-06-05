@@ -87,6 +87,7 @@ def train_mfnet_h(model, optimizer, criterion, train_iterator, mixup_alpha, cur_
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, cls_losses.val, c_losses.val,
                 losses.avg, cls_losses.avg, c_losses.avg, top1.val, top1.avg, top5.val, top5.avg, lr_scheduler.get_lr()[0]),
             log_file)
+        print_and_save("Epoch train time: {}".format(batch_time.sum))
 
 
 def test_mfnet_h(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):

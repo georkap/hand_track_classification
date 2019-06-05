@@ -159,6 +159,7 @@ def train_cnn(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoc
         print_and_save('[Epoch:{}, Batch {}/{} in {:.3f} s][Loss {:.4f}[avg:{:.4f}], Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]], LR {:.6f}'.format(
                 cur_epoch, batch_idx, len(train_iterator), batch_time.val, losses.val, losses.avg, top1.val, top1.avg, top5.val, top5.avg,
                 lr_scheduler.get_lr()[0]), log_file)
+    print_and_save("Epoch train time: {}".format(batch_time.sum))
 
 def test_cnn(model, criterion, test_iterator, cur_epoch, dataset, log_file, gpus):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()

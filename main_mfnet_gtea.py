@@ -14,7 +14,7 @@ import torchvision.transforms as transforms
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_mt_checkpoints, init_folders
-from utils.dataset_loader import FromVideoDatasetLoader, prepare_sampler
+from utils.dataset_loader import FromVideoDatasetLoader, FromVideoDatasetLoaderGulp, prepare_sampler
 from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
 from utils.train_utils import load_lr_scheduler, CyclicLR
 from utils.calc_utils import AverageMeter, accuracy
@@ -79,6 +79,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, cur_e
                 ind, top1_meters[ind].val, top1_meters[ind].avg, top5_meters[ind].val, top5_meters[ind].avg)
         to_print += 'LR {:.6f}'.format(lr_scheduler.get_lr()[0])
         print_and_save(to_print, log_file)
+    print_and_save("Epoch train time: {}".format(batch_time.sum))
 
 def test_cnn_mo(model, criterion, test_iterator, num_outputs, cur_epoch, dataset, log_file, gpus):
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
@@ -160,7 +161,7 @@ def main():
             RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
             RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
             ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    train_loader = FromVideoDatasetLoader(train_sampler, args.train_list, 'GTEA', num_classes, GTEA_CLASSES,
+    train_loader = FromVideoDatasetLoaderGulp(train_sampler, args.train_list, 'GTEA', num_classes, GTEA_CLASSES,
                                           batch_transform=train_transforms, extra_nouns=False)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
@@ -169,7 +170,7 @@ def main():
     test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
     test_transforms=transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
                                         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    test_loader = FromVideoDatasetLoader(test_sampler, args.test_list, 'GTEA', num_classes, GTEA_CLASSES,
+    test_loader = FromVideoDatasetLoaderGulp(test_sampler, args.test_list, 'GTEA', num_classes, GTEA_CLASSES,
                                          batch_transform=test_transforms, extra_nouns=False)
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
