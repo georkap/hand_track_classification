@@ -422,7 +422,8 @@ class FromVideoDatasetLoaderGulp(torchDataset):
         # gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
         gulp_data_dir = r"D:\Datasets\gteagulp"
         self.gd = GulpDirectory(gulp_data_dir)
-        self.items = list(self.gd.merged_meta_dict.items())
+        # self.items = list(self.gd.merged_meta_dict.items())
+        self.merged_data_dict = self.gd.merged_meta_dict
         self.num_chunks = self.gd.num_chunks
         self.data_path = gulp_data_dir
 
@@ -430,8 +431,10 @@ class FromVideoDatasetLoaderGulp(torchDataset):
         return len(self.video_list)
 
     def __getitem__(self, index):
-        item_id, item_info = self.items[index]
-        assert item_id == self.video_list[index].data_path
+        # item_id, item_info = self.items[index]
+        # assert item_id == self.video_list[index].data_path
+        path = self.video_list[index].data_path
+        item_info = self.merged_data_dict[path]
         frame_count = len(item_info['frame_info'])
         assert frame_count > 0
 
@@ -440,9 +443,9 @@ class FromVideoDatasetLoaderGulp(torchDataset):
         sampler_step = self.sampler.interval
         produced_step = np.mean(sampled_idxs[1:] - np.roll(sampled_idxs,1)[1:])
         if sampler_step[0] == produced_step:
-            sampled_frames, meta = self.gd[item_id, slice(sampled_idxs[0], sampled_idxs[-1]+1, sampler_step[0])]
+            sampled_frames, meta = self.gd[path, slice(sampled_idxs[0], sampled_idxs[-1]+1, sampler_step[0])]
         else:
-            imgs, meta = self.gd[item_id]
+            imgs, meta = self.gd[path]
             assert sampled_idxs[-1] < len(imgs)
             sampled_frames = []
             for i in sampled_idxs:
