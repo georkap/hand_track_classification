@@ -95,8 +95,12 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, cur_epoch, dataset
 
             outputs = model(inputs)
 
-            losses_per_task = [criterion(output, target) for output, target in zip(outputs, targets)]
-            loss = torch.sum(torch.tensor(losses_per_task).cuda())
+            losses_per_task = []
+            for output, target in zip(outputs, targets):
+                loss_for_task = criterion(output, target)
+                losses_per_task.append(loss_for_task)
+
+            loss = sum(losses_per_task)
 
             # update metrics
             batch_size = outputs[0].size(0)
