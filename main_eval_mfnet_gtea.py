@@ -34,7 +34,7 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
     losses = AverageMeter()
     top1_meters = [AverageMeter() for _ in range(num_outputs)]
     top5_meters = [AverageMeter() for _ in range(num_outputs)]
-    task_outputs = []*num_outputs
+    task_outputs = [[] for _ in range(num_outputs)]
 
     print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
     with torch.no_grad():
@@ -54,7 +54,7 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
 
             batch_size = outputs[0].size(0)
 
-            batch_preds = []*num_outputs
+            batch_preds = [[] for _ in range(num_outputs)]
             for j in range(batch_size):
                 txt_batch_preds = "{}".format(video_names[j])
                 for ind in range(num_outputs):
@@ -109,7 +109,7 @@ def main():
 
     num_valid_classes = len([cls for cls in num_classes if cls > 0])
     valid_classes = [cls for cls in num_classes if cls > 0]
-    overall_top1, overall_mean_cls_acc = []*num_valid_classes, []*num_valid_classes
+    overall_top1, overall_mean_cls_acc = [[] for _ in range(num_valid_classes)], [[] for _ in range(num_valid_classes)]
     for i in range(args.mfnet_eval):
         crop_type = CenterCrop((224, 224)) if args.eval_crop == 'center' else RandomCrop((224, 224))
         if args.eval_sampler == 'middle':

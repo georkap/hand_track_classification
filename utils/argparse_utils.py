@@ -91,7 +91,7 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--only_right', default=False, action='store_true')
         
     parser.add_argument('--double_output', default=False, action='store_true')
-    parser.add_argument('--multi_task', default=False, action='store_true')
+    parser.add_argument('--multi_task', default=False, action='store_true') # this is only used to create the name
 
     return parser
     
