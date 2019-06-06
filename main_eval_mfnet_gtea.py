@@ -109,7 +109,8 @@ def main():
 
     num_valid_classes = len([cls for cls in num_classes if cls > 0])
     valid_classes = [cls for cls in num_classes if cls > 0]
-    overall_top1, overall_mean_cls_acc = [[] for _ in range(num_valid_classes)], [[] for _ in range(num_valid_classes)]
+    overall_top1 = [0]*num_valid_classes
+    overall_mean_cls_acc = [0]*num_valid_classes
     for i in range(args.mfnet_eval):
         crop_type = CenterCrop((224, 224)) if args.eval_crop == 'center' else RandomCrop((224, 224))
         if args.eval_sampler == 'middle':
