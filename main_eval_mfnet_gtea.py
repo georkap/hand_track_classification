@@ -54,7 +54,7 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
 
             batch_size = outputs[0].size(0)
 
-            batch_preds = [[] for _ in range(num_outputs)]
+            batch_preds = []
             for j in range(batch_size):
                 txt_batch_preds = "{}".format(video_names[j])
                 for ind in range(num_outputs):
