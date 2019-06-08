@@ -9,7 +9,7 @@ class MiddleSampling(object):
     def __init__(self, num):
         assert num > 0
         self.num = num
-        self.interval = -1
+        self.interval = [-1]
 
     ''' sample uniformly between start frame and range_max if range_max < 32
             If range_max > 32 then target 32 frames around (start_frame+range_max)/2 and sample uniformly from them.
