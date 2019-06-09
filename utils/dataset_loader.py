@@ -419,8 +419,8 @@ class FromVideoDatasetLoaderGulp(torchDataset):
         self.validation = validation
         self.vis_data = vis_data
 
-        gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
-        # gulp_data_dir = r"F:\workspace_George\GTEA\gteagulp"
+        # gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
+        gulp_data_dir = r"F:\workspace_George\GTEA\gteagulp"
         self.gd = GulpDirectory(gulp_data_dir)
         # self.items = list(self.gd.merged_meta_dict.items())
         self.merged_data_dict = self.gd.merged_meta_dict
