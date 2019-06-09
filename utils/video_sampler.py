@@ -18,7 +18,7 @@ class MiddleSampling(object):
         assert range_max > 0
         if range_max < 32:
             clip_start = start_frame
-            clip_end = clip_start + range_max
+            clip_end = clip_start + range_max -1 # putting -1 here so that I dont change the sampler's behaviour by putting endpoint=False sto linspace
         else:
             middle = start_frame + range_max//2
             clip_start = middle - 16

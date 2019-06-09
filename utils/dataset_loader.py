@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from torch.utils.data import Dataset as torchDataset
-from utils.video_sampler import RandomSampling, SequentialSampling
+from utils.video_sampler import RandomSampling, SequentialSampling, MiddleSampling
 
 
 def get_class_weights(list_file, num_classes, use_mapping):
@@ -419,8 +419,8 @@ class FromVideoDatasetLoaderGulp(torchDataset):
         self.validation = validation
         self.vis_data = vis_data
 
-        # gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
-        gulp_data_dir = r"F:\workspace_George\GTEA\gteagulp"
+        gulp_data_dir = r"D:\Datasets\egocentric\GTEA\gulp_output2"
+        # gulp_data_dir = r"F:\workspace_George\GTEA\gteagulp"
         self.gd = GulpDirectory(gulp_data_dir)
         # self.items = list(self.gd.merged_meta_dict.items())
         self.merged_data_dict = self.gd.merged_meta_dict
@@ -1169,7 +1169,8 @@ if __name__=='__main__':
     test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
-    val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=seed)
+    val_sampler = MiddleSampling(num=16)
+    # val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=seed)
     # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
     #                                     img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
     #                                     batch_transform=train_transforms, vis_data=True)
