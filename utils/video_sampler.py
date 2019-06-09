@@ -16,7 +16,7 @@ class MiddleSampling(object):
     '''
     def sampling(self, range_max, v_id=None, pref_failed=False, start_frame=0):
         assert range_max > 0
-        if range_max < 32:
+        if range_max <= 32:
             clip_start = start_frame
             clip_end = clip_start + range_max -1 # putting -1 here so that I dont change the sampler's behaviour by putting endpoint=False sto linspace
         else:
@@ -25,7 +25,7 @@ class MiddleSampling(object):
             clip_end = middle + 16
         idxs = np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
         for idx in idxs:
-            assert idx >=start_frame and idx <= start_frame+range_max
+            assert idx >=start_frame and idx < start_frame+range_max
         return idxs
 
 class RandomSampling(object):
