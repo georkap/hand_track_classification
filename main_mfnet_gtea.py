@@ -10,7 +10,6 @@ import time
 import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
-import numpy as np
 import dsntnn
 
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
@@ -68,19 +67,21 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_g
         targets = targets.cuda(gpus[0]).transpose(0,1) # needs transpose to get the first dim to be the task and the second dim to be the batch
 
         if use_gaze or use_hands:
-            targets = targets[num_outputs, :].long()
-        assert len(targets) == num_outputs
+            cls_targets = targets[:num_outputs, :].long()
+        else:
+            cls_targets = targets
+        assert len(cls_targets) == num_outputs
 
         losses_per_task = []
-        for output, target in zip(outputs, targets):
+        for output, target in zip(outputs, cls_targets):
             loss_for_task = criterion(output, target)
             losses_per_task.append(loss_for_task)
 
         loss = sum(losses_per_task)
 
         gaze_coord_loss, hand_coord_loss = 0, 0
-        if use_gaze:
-            gaze_targets = targets[num_outputs:num_outputs+16, :].reshape(-1, 2)
+        if use_gaze: # need some debugging for the gaze targets
+            gaze_targets = targets[num_outputs:num_outputs+16, :].reshape(-1, 8, 2)
             # for a single shared layer representation of the two signals
             # for gaze slice the first element
             gaze_coords = coords[:,:,0,:]
@@ -88,7 +89,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_g
             gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
             loss = loss + gaze_coord_loss
         if use_hands:
-            hand_targets = targets[-32:, :].reshape(-1, 2, 2)
+            hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
             # for hands slice the last two elements, first is left, second is right hand
             hand_coords = coords[:,:,-2:,:]
             hand_heatmaps = heatmaps[:,:,-2:,:]
@@ -104,7 +105,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_g
         losses.update(loss.item(), batch_size)
 
         for ind in range(num_outputs):
-            t1, t5 = accuracy(outputs[ind].detach().cpu(), targets[ind].detach().cpu(), topk=(1,5))
+            t1, t5 = accuracy(outputs[ind].detach().cpu(), cls_targets[ind].detach().cpu(), topk=(1,5))
             top1_meters[ind].update(t1.item(), batch_size)
             top5_meters[ind].update(t5.item(), batch_size)
             loss_meters[ind].update(losses_per_task[ind].item(), batch_size)
@@ -145,18 +146,18 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hand
             targets = targets.cuda(gpus[0]).transpose(0, 1)
 
             if use_gaze or use_hands:
-                targets = targets[num_outputs, :].long()
-            assert len(targets) == num_outputs
+                cls_targets = targets[:num_outputs, :].long()
+            assert len(cls_targets) == num_outputs
 
             losses_per_task = []
-            for output, target in zip(outputs, targets):
+            for output, target in zip(outputs, cls_targets):
                 loss_for_task = criterion(output, target)
                 losses_per_task.append(loss_for_task)
 
             loss = sum(losses_per_task)
 
-            if use_gaze:
-                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 2)
+            if use_gaze:  # need some debugging for the gaze targets
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
                 # for a single shared layer representation of the two signals
                 # for gaze slice the first element
                 gaze_coords = coords[:, :, 0, :]
@@ -164,7 +165,7 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hand
                 gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
                 loss = loss + gaze_coord_loss
             if use_hands:
-                hand_targets = targets[-32:, :].reshape(-1, 2, 2)
+                hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
                 # for hands slice the last two elements, first is left, second is right hand
                 hand_coords = coords[:, :, -2:, :]
                 hand_heatmaps = heatmaps[:, :, -2:, :]
@@ -176,7 +177,7 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hand
             losses.update(loss.item(), batch_size)
 
             for ind in range(num_outputs):
-                t1, t5 = accuracy(outputs[ind].detach().cpu(), targets[ind].detach().cpu(), topk=(1, 5))
+                t1, t5 = accuracy(outputs[ind].detach().cpu(), cls_targets[ind].detach().cpu(), topk=(1, 5))
                 top1_meters[ind].update(t1.item(), batch_size)
                 top5_meters[ind].update(t5.item(), batch_size)
                 loss_meters[ind].update(losses_per_task[ind].item(), batch_size)

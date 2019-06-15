@@ -545,7 +545,7 @@ class FromVideoDatasetLoaderGulp(torchDataset):
                     labels.append(en)
 
         if self.use_gaze or self.use_hands:
-            labels = np.array(labels, dtype=np.float)
+            labels = np.array(labels, dtype=np.float32)
         else:
             labels = np.array(labels, dtype=np.int64)  # numpy array for pytorch dataloader compatibility
         if self.use_gaze:
