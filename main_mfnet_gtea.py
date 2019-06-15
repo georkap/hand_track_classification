@@ -68,7 +68,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_g
         targets = targets.cuda(gpus[0]).transpose(0,1) # needs transpose to get the first dim to be the task and the second dim to be the batch
 
         if use_gaze or use_hands:
-            targets = targets[num_outputs, :].astype(np.int64).long()
+            targets = targets[num_outputs, :].long()
         assert len(targets) == num_outputs
 
         losses_per_task = []
