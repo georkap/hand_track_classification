@@ -124,8 +124,7 @@ def main():
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
         val_loader = FromVideoDatasetLoaderGulp(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
-                                                batch_transform=val_transforms, extra_nouns=False,
-                                                validation=True)
+                                                batch_transform=val_transforms, extra_nouns=False, validation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
                                                shuffle=False,

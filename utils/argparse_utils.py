@@ -25,6 +25,8 @@ def make_base_parser(val):
     parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', 
                         choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0', 'hand_detection_tracks',
                                  'hand_detection_tracks_lr', 'hand_detection_tracks_lr005', 'hand_detection_tracks_lr001'])
+    parser.add_argument('--gaze_list_prefix', type=str, default='')
+    parser.add_argument('--hand_list_prefix', type=str, default='')
     parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
@@ -78,6 +80,8 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--feature_extraction', default=False, action='store_true')
     if net_type == 'mfnet':
         parser.add_argument('--pretrained_model_path', type=str, default=r"models\MFNet3D_Kinetics-400_72.8.pth")
+        parser.add_argument('--use_hands', default=False, action='store_true')
+        parser.add_argument('--use_gaze', default=False, action='store_true')
     if net_type in ['lstm', 'lstm_polar', 'lstm_diffs']:
         parser.add_argument('--lstm_bidir', default=False, action='store_true')
         parser.add_argument('--lstm_input', type=int, default=4)
@@ -159,6 +163,7 @@ def parse_args(net_type, val=False):
 
 
 def make_model_name(args, net_type):
+    model_name = ''
     if net_type == 'resnet':
         model_name = "res{}_{}_{}_{}_{}".format(args.resnet_version, args.channels, args.batch_size,
                                                 str(args.dropout).split('.')[0]+str(args.dropout).split('.')[1],
@@ -240,6 +245,10 @@ def make_model_name(args, net_type):
     model_name = model_name + "_vsel{}".format(args.verb_classes)
     if args.double_output or args.multi_task:
         model_name = model_name + "_nsel{}".format(args.noun_classes)
+    if args.use_hands:
+        model_name = model_name + "_hands"
+    if args.use_gaze:
+        model_name = model_name + "_gaze"
     if args.mixup_a != 1.:
         model_name = model_name + "_mixup" 
 
@@ -276,7 +285,7 @@ def parse_args_train_log_dir():
     return parser.parse_args()
 
 def parse_args_val():
-    ''' Only for legacy experiments'''
+    """ Only for legacy experiments"""
     parser = argparse.ArgumentParser(description='Hand activity recognition - validation')
     
     # Load the necessary paths

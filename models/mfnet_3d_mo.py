@@ -11,13 +11,32 @@ here an mfnet with two output linear layers is produced, for two jointly trained
 @author: Γιώργος
 """
 import logging
-import os
 from collections import OrderedDict
-
+import dsntnn
 import torch.nn as nn
 
 from utils import initializer
 
+class CoordRegressionLayer(nn.Module):
+    def __init__(self, input_filters, n_locations):
+        super().__init__() #super(CoordRegressionLayer, self).__init__()
+        self.hm_conv = nn.Conv3d(input_filters, n_locations, kernel_size=1, bias=False)
+
+    def forward(self, h):
+        # 1. Use a 1x1 conv to get one unnormalized heatmap per location
+        unnormalized_heatmaps = self.hm_conv(h)
+        # 2. Transpose the heatmap volume to keep the temporal dimension in the volume
+        unnormalized_heatmaps.transpose_(2, 1).transpose_(1, 0)
+        # 3. Normalize the heatmaps
+        heatmaps = [dsntnn.flat_softmax(uhm) for uhm in unnormalized_heatmaps]
+#        heatmaps = dsntnn.flat_softmax(unnormalized_heatmaps)
+        # 4. Calculate the coordinates
+#        coords = dsntnn.dsnt(heatmaps)
+        coords = [dsntnn.dsnt   (hm) for hm in heatmaps]
+        heatmaps = torch.stack(heatmaps, 1)
+        coords = torch.stack(coords, 1)
+
+        return coords, heatmaps
 
 class MultitaskClassifiers(nn.Module):
     def __init__(self, last_conv_size, num_classes):
@@ -89,6 +108,7 @@ class MFNET_3D(nn.Module):
         # support for arbitrary number of output layers, but it is the user's job to make sure they make sense
         # (e.g. actions->actions and not actions->verbs,nouns etc.)
         self.num_classes = num_classes
+        self.num_coords = kwargs.get('num_coords', 0)
 
         groups = 16
         k_sec  = {  2: 3, \
@@ -153,12 +173,17 @@ class MFNET_3D(nn.Module):
                                         first_block=(i==1))) for i in range(1,k_sec[5]+1)
                     ]))
 
+        # create heatmaps
+        if self.num_coords > 0:
+            self.coord_layers = CoordRegressionLayer(conv5_num_out, self.num_coords)
+
         # final
         self.tail = nn.Sequential(OrderedDict([
                     ('bn', nn.BatchNorm3d(conv5_num_out)),
                     ('relu', nn.ReLU(inplace=True))
                     ]))
-        
+
+
         if dropout:
             self.globalpool = nn.Sequential(OrderedDict([
                             ('avg', nn.AvgPool3d(kernel_size=(8,7,7), stride=(1,1,1))),
@@ -204,31 +229,25 @@ class MFNET_3D(nn.Module):
         h = self.conv5(h)   #  x14 ->   x7
 
         h = self.tail(h)
+        coords, heatmaps = None, None
+        if self.num_coords > 0:
+            coords, heatmaps = self.coord_layers(h)
+
         h = self.globalpool(h)
 
         h = h.view(h.shape[0], -1)
 
-
-        # h_out = self.classifier(h)
         h_out = self.classifier_list(h)
-        # h_out = []
-        # for i, cl in enumerate(self.classifier_list):
-        #     h_out.append(cl(h))
-        # h_out = list()
-        # for i, num_cls in enumerate(self.num_classes):
-        #     if num_cls > 0:
-        #         h_out.append(getattr(self, 'classifier{}'.format(i)))
 
-
-
-        return h_out
+        return h_out, coords, heatmaps
 
 if __name__ == "__main__":
     import torch
     logging.getLogger().setLevel(logging.DEBUG)
     # ---------
-    net = MFNET_3D(num_classes=[2,3], pretrained=False)
-    data = torch.tensor(torch.randn(2,3,16,224,224))
+    kwargs = {'num_coords':3}
+    net = MFNET_3D(num_classes=[2,3], pretrained=False, **kwargs)
+    data = torch.tensor(torch.randn(1,3,16,224,224))
     output = net(data)
 #    torch.save({'state_dict': net.state_dict()}, './tmp.pth')
     print (len(output))
