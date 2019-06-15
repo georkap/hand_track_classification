@@ -208,22 +208,28 @@ def main():
     num_coords = 0
     objectives_text = "Objectives: "
     num_classes = [args.action_classes, args.verb_classes, args.noun_classes]
+    num_objectives = 0
     if args.action_classes > 0:
         objectives_text += " actions {}, ".format(args.action_classes)
+        num_objectives += 1
     if args.verb_classes > 0:
         # num_classes.append(args.verb_classes)
         objectives_text += " verbs {}, ".format(args.verb_classes)
+        num_objectives += 1
     if args.noun_classes > 0:
         # num_classes.append(args.noun_classes)
         objectives_text += " nouns {}, ".format(args.noun_classes)
+        num_objectives += 1
     if args.use_gaze:
         objectives_text += " gaze, "
         num_coords += 1
+        num_objectives += 1
     if args.use_hands:
         objectives_text += " hands, "
         num_coords += 2
+        num_objectives += 1
     kwargs["num_coords"] = num_coords
-    print_and_save("Training for {} objective(s)".format(len(num_classes)), log_file)
+    print_and_save("Training for {} objective(s)".format(num_objectives), log_file)
     print_and_save(objectives_text, log_file)
     # for now just limit the tasks to max 3 and dont take extra nouns into account
     model_ft = mfnet_3d(num_classes, dropout=args.dropout, **kwargs)

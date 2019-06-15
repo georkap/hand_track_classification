@@ -13,6 +13,7 @@ here an mfnet with two output linear layers is produced, for two jointly trained
 import logging
 from collections import OrderedDict
 import dsntnn
+import torch
 import torch.nn as nn
 
 from utils import initializer

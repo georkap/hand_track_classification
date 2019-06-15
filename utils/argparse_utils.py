@@ -30,12 +30,12 @@ def make_base_parser(val):
     parser.add_argument('--append_to_model_name', type=str, default="")
     
     return parser
-    
+
 def parse_args_dataset(parser, net_type):
     # Dataset parameters
     parser.add_argument('--action_classes', type=int, default=106) # only for gtea
-    parser.add_argument('--verb_classes', type=int, default=120)
-    parser.add_argument('--noun_classes', type=int, default=322)
+    parser.add_argument('--verb_classes', type=int, default=120) # max epic:125, gtea:19
+    parser.add_argument('--noun_classes', type=int, default=322) # max epic:322, gtea:53
     parser.add_argument('--batch_size', type=int, default=1)
     if net_type in ['resnet', 'mfnet']:
         parser.add_argument('--clip_gradient', action='store_true')
@@ -80,8 +80,8 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--feature_extraction', default=False, action='store_true')
     if net_type == 'mfnet':
         parser.add_argument('--pretrained_model_path', type=str, default=r"models\MFNet3D_Kinetics-400_72.8.pth")
-        parser.add_argument('--use_hands', default=False, action='store_true')
-        parser.add_argument('--use_gaze', default=False, action='store_true')
+        parser.add_argument('--use_gaze', default=False, action='store_true') # only applies to gtea multitask for now
+        parser.add_argument('--use_hands', default=False, action='store_true') # only applies to gtea multitask for now
     if net_type in ['lstm', 'lstm_polar', 'lstm_diffs']:
         parser.add_argument('--lstm_bidir', default=False, action='store_true')
         parser.add_argument('--lstm_input', type=int, default=4)
