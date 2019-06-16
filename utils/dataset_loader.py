@@ -472,8 +472,9 @@ class FromVideoDatasetLoaderGulp(torchDataset):
 
             left_track = left_track[sampled_idxs]  # keep the points for the sampled frames
             right_track = right_track[sampled_idxs]
-            left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
-            right_track = right_track[::2]
+            if not self.vis_data:
+                left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
+                right_track = right_track[::2]
 
             norm_val = self.norm_val
             if self.transform is not None:
@@ -509,6 +510,11 @@ class FromVideoDatasetLoaderGulp(torchDataset):
                     left_track[:, 0] = max_w - left_track[:, 0]
                     right_track[:, 0] = max_w - right_track[:, 0]
 
+            if self.vis_data:
+                left_track_vis = left_track
+                right_track_vis = right_track
+                left_track = left_track[::2]
+                right_track = right_track[::2]
             # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
             left_track = (left_track * 2 + 1) / norm_val[:2] - 1
             right_track = (right_track * 2 + 1) / norm_val[2:] - 1
@@ -554,9 +560,27 @@ class FromVideoDatasetLoaderGulp(torchDataset):
             labels = np.concatenate((labels, hand_points))
 
         if self.vis_data:
+            # for i in range(len(sampled_frames)):
+            #     cv2.imshow('orig_img', sampled_frames[i])
+            #     cv2.imshow('transform', clip_input[:, i, :, :].numpy().transpose(1, 2, 0))
+            #     cv2.waitKey(0)
+
+            def vis_with_circle(img, left_point, right_point, winname):
+                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255, 0, 0), 4)
+                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0, 0, 255), 4)
+                cv2.imshow(winname, k)
+
+            orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+            orig_left = orig_left[sampled_idxs]
+            orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+            orig_right = orig_right[sampled_idxs]
+
             for i in range(len(sampled_frames)):
-                cv2.imshow('orig_img', sampled_frames[i])
-                cv2.imshow('transform', clip_input[:, i, :, :].numpy().transpose(1, 2, 0))
+                vis_with_circle(sampled_frames[i], orig_left[i], orig_right[i], 'no augmentation')
+                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), left_track_vis[i], right_track_vis[i],
+                                'transformed')
+                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), orig_left[i], orig_right[i],
+                                'transf_img_not_coords')
                 cv2.waitKey(0)
 
         if not self.validation:
@@ -1223,7 +1247,7 @@ if __name__=='__main__':
     #video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
     #point_list_prefix = 'hand_detection_tracks_lr001'
-    video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split1.txt"
+    video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split2.txt"
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
@@ -1254,7 +1278,7 @@ if __name__=='__main__':
     for i in range(len(loader)):
         item = loader.__getitem__(i)
         print("\rItem {} ok".format(i))
-#    
+
 #    from dataset_loader_utils import Resize, ResizePadFirst
 #    
 #    image = cv2.imread(r"..\hand_detection_track_images\P24\P24_08\90442_0_35.png", cv2.IMREAD_GRAYSCALE).astype(np.float32)

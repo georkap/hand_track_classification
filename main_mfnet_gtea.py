@@ -147,6 +147,8 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hand
 
             if use_gaze or use_hands:
                 cls_targets = targets[:num_outputs, :].long()
+            else:
+                cls_targets = targets
             assert len(cls_targets) == num_outputs
 
             losses_per_task = []
