@@ -152,7 +152,7 @@ def avg_rec_prec_trimmed(pred, labels, valid_class_indices, all_class_indices):
     
     return np.sum(precision)/len(precision), np.sum(recall)/len(recall), cm_trimmed_rows.astype(int)
 
-def eval_final_print_gtea(video_preds, video_labels, task_id, current_classes, log_file):
+def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log_file):
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels,
                                                                                   all_class_indices=list(range(int(current_classes))))
     print_and_save("Task {}".format(task_id), log_file)
@@ -166,7 +166,6 @@ def eval_final_print_gtea(video_preds, video_labels, task_id, current_classes, l
     print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
     print_and_save("Dataset Acc {}".format(top1_acc), log_file)
     return mean_cls_acc, top1_acc
-
 
 def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_list, max_classes, log_file):
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels,

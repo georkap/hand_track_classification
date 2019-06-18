@@ -15,7 +15,7 @@ from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_mt_checkpoints, init_folders, resume_checkpoint
 from utils.dataset_loader import FromVideoDatasetLoader, FromVideoDatasetLoaderGulp, prepare_sampler
 from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
-from utils.train_utils import load_lr_scheduler, train_cnn_mo, test_cnn_mo
+from utils.train_utils import load_lr_scheduler, train_mfnet_mo, test_mfnet_mo
 
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
@@ -126,8 +126,8 @@ def main():
     ce_loss = torch.nn.CrossEntropyLoss().cuda(device=args.gpus[0])
     lr_scheduler = load_lr_scheduler(args.lr_type, args.lr_steps, optimizer, len(train_iterator))
 
-    train = train_cnn_mo
-    test = test_cnn_mo
+    train = train_mfnet_mo
+    test = test_mfnet_mo
     num_valid_classes = len([cls for cls in num_classes if cls > 0])
     new_top1, top1 = [0.0] * num_valid_classes, [0.0] * num_valid_classes
     for epoch in range(args.max_epochs):

@@ -49,11 +49,11 @@ def main():
     if args.noun_classes > 0:
         objectives_text += " nouns {}, ".format(args.noun_classes)
         num_objectives += 1
-    if args.use_gaze: # unused in EPIC
-        objectives_text += " gaze, "
-        num_coords += 1
-        num_objectives += 1
-    if args.use_hands:
+    # if args.use_gaze: # unused in EPIC
+    #     objectives_text += " gaze, "
+    #     num_coords += 1
+    #     num_objectives += 1
+    if True: #args.use_hands:
         objectives_text += " hands, "
         num_coords += 2
         num_objectives += 1
@@ -137,13 +137,13 @@ def main():
     num_valid_classes = len([cls for cls in num_classes if cls > 0])
     new_top1, top1 = [0.0] * num_valid_classes, [0.0] * num_valid_classes
     for epoch in range(args.max_epochs):
-        train(model_ft, optimizer, ce_loss, train_iterator, num_valid_classes, args.use_gaze, args.use_hands, epoch,
+        train(model_ft, optimizer, ce_loss, train_iterator, num_valid_classes, False, True, epoch,
               log_file, args.gpus, lr_scheduler)
         if (epoch + 1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test(model_ft, ce_loss, train_iterator, num_valid_classes, args.use_gaze, args.use_hands, epoch,
+                test(model_ft, ce_loss, train_iterator, num_valid_classes, False, True, epoch,
                      "Train", log_file, args.gpus)
-            new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, args.use_gaze, args.use_hands, epoch,
+            new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, False, True, epoch,
                             "Test", log_file, args.gpus)
             top1 = save_mt_checkpoints(model_ft, optimizer, top1, new_top1, args.save_all_weights, output_dir,
                                        model_name, epoch, log_file)

@@ -631,7 +631,7 @@ def calc_coord_loss(coords, heatmaps, target_var):
     return coord_loss
 
 
-def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_gaze, use_hands, cur_epoch, log_file,
+def train_mfnet_mo(model, optimizer, criterion, train_iterator, num_outputs, use_gaze, use_hands, cur_epoch, log_file,
                  gpus, lr_scheduler=None):
     batch_time = AverageMeter()
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
@@ -724,7 +724,7 @@ def train_cnn_mo(model, optimizer, criterion, train_iterator, num_outputs, use_g
     print_and_save("Epoch train time: {}".format(batch_time.sum), log_file)
 
 
-def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file, gpus):
+def test_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file, gpus):
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
     losses = AverageMeter()
     top1_meters = [AverageMeter() for _ in range(num_outputs)]
@@ -788,6 +788,85 @@ def test_cnn_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hand
             final_print += 'T{}::Top1 {:.3f}, Top5 {:.3f},'.format(ind, top1_meters[ind].avg, top5_meters[ind].avg)
         print_and_save(final_print, log_file)
     return [tasktop1.avg for tasktop1 in top1_meters]
+
+def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
+    loss_meters = [AverageMeter() for _ in range(num_outputs)]
+    losses = AverageMeter()
+    top1_meters = [AverageMeter() for _ in range(num_outputs)]
+    top5_meters = [AverageMeter() for _ in range(num_outputs)]
+    task_outputs = [[] for _ in range(num_outputs)]
+
+    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
+            inputs = inputs.cuda()
+            outputs, coords, heatmaps = model(inputs)
+            targets = targets.cuda().transpose(0, 1)
+
+            if use_gaze or use_hands:
+                cls_targets = targets[:num_outputs, :].long()
+            else:
+                cls_targets = targets
+            assert len(cls_targets) == num_outputs
+
+            losses_per_task = []
+            for output, target in zip(outputs, cls_targets):
+                loss_for_task = criterion(output, target)
+                losses_per_task.append(loss_for_task)
+
+            loss = sum(losses_per_task)
+
+            gaze_coord_loss, hand_coord_loss = 0, 0
+            if use_gaze:  # need some debugging for the gaze targets
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
+                # for a single shared layer representation of the two signals
+                # for gaze slice the first element
+                gaze_coords = coords[:, :, 0, :]
+                gaze_heatmaps = heatmaps[:, :, 0, :, :]
+                gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
+                loss = loss + gaze_coord_loss
+            if use_hands:
+                hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
+                # for hands slice the last two elements, first is left, second is right hand
+                hand_coords = coords[:, :, -2:, :]
+                hand_heatmaps = heatmaps[:, :, -2:, :]
+                hand_coord_loss = calc_coord_loss(hand_coords, hand_heatmaps, hand_targets)
+                loss = loss + hand_coord_loss
+
+            batch_size = outputs[0].size(0)
+
+            batch_preds = []
+            for j in range(batch_size):
+                txt_batch_preds = "{}".format(video_names[j])
+                for ind in range(num_outputs):
+                    txt_batch_preds += ", "
+                    res = np.argmax(outputs[ind][j].detach().cpu().numpy())
+                    label = cls_targets[ind][j].detach().cpu().numpy()
+                    task_outputs[ind].append([res, label])
+                    txt_batch_preds += "T{} P-L:{}-{}".format(ind, res, label)
+                batch_preds.append(txt_batch_preds)
+
+            losses.update(loss.item(), batch_size)
+            for ind in range(num_outputs):
+                t1, t5 = accuracy(outputs[ind].detach().cpu(), cls_targets[ind].detach().cpu(), topk=(1, 5))
+                top1_meters[ind].update(t1.item(), batch_size)
+                top5_meters[ind].update(t5.item(), batch_size)
+                loss_meters[ind].update(losses_per_task[ind].item(), batch_size)
+
+            to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
+            for ind in range(num_outputs):
+                to_print += '[T{}::Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]],'.format(ind,
+                                                                                 top1_meters[ind].val, top1_meters[ind].avg,
+                                                                                 top5_meters[ind].val, top5_meters[ind].avg)
+            to_print+= '\n\t{}'.format(batch_preds)
+            print_and_save(to_print, log_file)
+
+        to_print = '{} Results: Loss {:.3f}'.format(dataset, losses.avg)
+        for ind in range(num_outputs):
+            to_print += ', T{}::Top1 {:.3f}, Top5 {:.3f}'.format(ind, top1_meters[ind].avg, top5_meters[ind].avg)
+        print_and_save(to_print, log_file)
+    return [tasktop1.avg for tasktop1 in top1_meters], task_outputs
 
 def train_mfnet_h(model, optimizer, criterion, train_iterator, mixup_alpha, cur_epoch, log_file, gpus,
               lr_scheduler=None):
@@ -864,3 +943,45 @@ def test_mfnet_h(model, criterion, test_iterator, cur_epoch, dataset, log_file, 
             '{} Results: Loss {:.3f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg, top1.avg, top5.avg),
             log_file)
     return top1.avg
+
+def validate_mfnet_hands(model, criterion, test_iterator, cur_epoch, dataset, log_file):
+    losses, cls_losses, coo_losses,  top1, top5 = AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter(), AverageMeter()
+    outputs = []
+
+    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, targets, points, video_names) in enumerate(test_iterator):
+            inputs = inputs.cuda()
+            target_class = targets.cuda()
+            target_var = points.cuda()
+
+            output, coords, heatmaps = model(inputs)
+
+            cls_loss = criterion(output, target_class)
+            coord_loss = calc_coord_loss(coords, heatmaps, target_var)
+            loss = cls_loss + coord_loss
+
+            batch_preds = []
+            for j in range(output.size(0)):
+                res = np.argmax(output[j].detach().cpu().numpy())
+                label = targets[j].cpu().numpy()
+                outputs.append([res, label])
+                batch_preds.append("{}, P-L:{}-{}".format(video_names[j], res, label))
+
+            t1, t5 = accuracy(output.detach().cpu(), targets.cpu(), topk=(1, 5))
+            top1.update(t1.item(), output.size(0))
+            top5.update(t5.item(), output.size(0))
+            losses.update(loss.item(), output.size(0))
+            cls_losses.update(cls_loss.item(), output.size(0))
+            coo_losses.update(coord_loss.item(), output.size(0))
+
+            print_and_save('[Batch {}/{}][Top1 {:.3f}[avg:{:.3f}], Top5 {:.3f}[avg:{:.3f}]]\n\t{}'.format(
+                batch_idx, len(test_iterator), top1.val, top1.avg, top5.val, top5.avg, batch_preds), log_file)
+        print_and_save(
+            '{} Results: Loss(f|cls|coo) {:.4f} | {:.4f} | {:.4f}, Top1 {:.3f}, Top5 {:.3f}'.format(dataset, losses.avg,
+                                                                                                    cls_losses.avg,
+                                                                                                    coo_losses.avg,
+                                                                                                    top1.avg, top5.avg),
+            log_file)
+    return top1.avg, outputs

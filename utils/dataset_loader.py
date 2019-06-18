@@ -1114,9 +1114,6 @@ class VideoAndPointDatasetLoader(torchDataset):
             if is_flipped:
                 left_track[:, 0] = max_w - left_track[:, 0]
                 right_track[:, 0] = max_w - right_track[:, 0]
-                # temp_left_track = left_track
-                # left_track[:, 0] = max_w - right_track[:, 0]
-                # right_track[:, 0] = max_w - temp_left_track[:, 0]
 
             if self.vis_data:
                 def vis_with_circle(img, left_point, right_point, winname):
@@ -1133,7 +1130,6 @@ class VideoAndPointDatasetLoader(torchDataset):
                 vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
                 vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'transf_img_not_coords')
                 cv2.waitKey(0)
-
 
         # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
         left_track = (left_track * 2 + 1) / norm_val[:2] - 1
