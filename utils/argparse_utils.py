@@ -129,6 +129,7 @@ def parse_args_eval(parser):
     parser.add_argument('--mfnet_eval', type=int, default=1)
     parser.add_argument('--eval_sampler', type=str, default='random', choices=['middle', 'random'])
     parser.add_argument('--eval_crop', type=str, default='random', choices=['center', 'random'])
+    parser.add_argument('--old_mfnet_eval', default=False, action='store_true')
     # lstm
     parser.add_argument('--save_attentions', default=False, action='store_true')
 

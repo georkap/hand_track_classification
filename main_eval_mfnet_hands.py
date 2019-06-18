@@ -53,6 +53,9 @@ def main():
     model_ft = mfnet_3d(num_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1': 'cuda:0'})
+    if args.old_mfnet_eval:
+        checkpoint['state_dict']['module.classifier_list.classifier_list.0.weight'] = checkpoint['state_dict']['module.classifier.weight']
+        checkpoint['state_dict']['module.classifier_list.classifier_list.0.bias'] = checkpoint['state_dict']['module.classifier.bias']
     model_ft.load_state_dict(checkpoint['state_dict'])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
 
