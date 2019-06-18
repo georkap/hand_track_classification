@@ -69,7 +69,7 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, us
             assert len(cls_targets) == num_outputs
 
             losses_per_task = []
-            for output, target in zip(outputs, targets):
+            for output, target in zip(outputs, cls_targets):
                 loss_for_task = criterion(output, target)
                 losses_per_task.append(loss_for_task)
 
