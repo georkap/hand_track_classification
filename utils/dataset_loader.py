@@ -1174,7 +1174,7 @@ class VideoAndPointDatasetLoader(torchDataset):
             if not self.validation:
                 return clip_input, labels
             else:
-                return clip_input, labels, self.video_list[index].data_path
+                return clip_input, labels, self.video_list[index].uid
 
 
 class PointVectorSummedDatasetLoader(torchDataset):
