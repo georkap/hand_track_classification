@@ -33,9 +33,9 @@ def make_base_parser(val):
 
 def parse_args_dataset(parser, net_type):
     # Dataset parameters
-    parser.add_argument('--action_classes', type=int, default=106) # only for gtea
+    parser.add_argument('--action_classes', type=int, default=0) # only for gtea, max gtea:106
     parser.add_argument('--verb_classes', type=int, default=120) # max epic:125, gtea:19
-    parser.add_argument('--noun_classes', type=int, default=322) # max epic:322, gtea:53
+    parser.add_argument('--noun_classes', type=int, default=0) # max epic:322, gtea:53
     parser.add_argument('--batch_size', type=int, default=1)
     if net_type in ['resnet', 'mfnet']:
         parser.add_argument('--clip_gradient', action='store_true')
@@ -94,8 +94,8 @@ def parse_args_network(parser, net_type):
         parser.add_argument('--only_left', default=False, action='store_true')
         parser.add_argument('--only_right', default=False, action='store_true')
         
-    parser.add_argument('--double_output', default=False, action='store_true')
-    parser.add_argument('--multi_task', default=False, action='store_true') # this is only used to create the name
+    parser.add_argument('--double_output', default=False, action='store_true') # kept for backwards compatibility
+    parser.add_argument('--multi_task', default=False, action='store_true') # assuming the role of double output after 18-June-19
 
     return parser
     

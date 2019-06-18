@@ -1020,14 +1020,28 @@ class PointDatasetLoader(torchDataset):
 
 
 class VideoAndPointDatasetLoader(torchDataset):
-    def __init__(self, sampler, video_list_file, point_list_prefix, num_classes=120, img_tmpl='img_{:05d}.jpg',
+    EPIC_MAX_CLASSES = [0, 125, 322]
+    def __init__(self, sampler, video_list_file, point_list_prefix, num_classes, img_tmpl='img_{:05d}.jpg', # removed predefined argument from num_classes
                  norm_val=None, batch_transform=None, validation=False, vis_data=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(video_list_file, DataLine)
-        if num_classes != 120 and num_classes != 125:
-            self.mapping = make_class_mapping(self.video_list)
+
+        if isinstance(num_classes, int): # old workflow for backwards compatibility to evaluate older models
+            if num_classes != 120 and num_classes != 125:
+                self.mapping = make_class_mapping(self.video_list)
+            else:
+                self.mapping = None
+            self.usable_objectives = None #this is what defines which workflow we are in for __getitem__
         else:
-            self.mapping = None
+            self.usable_objectives = list()
+            self.mappings = list()
+            for i, (objective, objective_name) in enumerate(zip(num_classes, FromVideoDatasetLoader.OBJECTIVE_NAMES)):
+                self.usable_objectives.append(objective > 0)
+                if objective != VideoAndPointDatasetLoader.EPIC_MAX_CLASSES[i] and self.usable_objectives[-1]:
+                    self.mappings.append(make_class_mapping_generic(self.video_list, objective_name))
+                else:
+                    self.mappings.append(None)
+            assert any(obj is True for obj in self.usable_objectives)
         self.point_list_prefix = point_list_prefix
         self.image_tmpl = img_tmpl
         self.transform = batch_transform
@@ -1129,15 +1143,42 @@ class VideoAndPointDatasetLoader(torchDataset):
 
         points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
 
-        if self.mapping:
-            class_id = self.mapping[label_verb]
-        else:
-            class_id = label_verb
+        if self.usable_objectives is None: # old workflow only for verbs and hands
+            if self.mapping:
+                class_id = self.mapping[label_verb]
+            else:
+                class_id = label_verb
 
-        if not self.validation:
-            return clip_input, class_id, points
-        else:
-            return clip_input, class_id, points, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
+            if not self.validation:
+                return clip_input, class_id, points
+            else:
+                return clip_input, class_id, points, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
+        else: # new multitask workflow
+            # get the labels for the tasks
+            labels = list()
+            if self.usable_objectives[0]:
+                pass # for now
+                # action_id = self.video_list[index].label_action
+                # if self.mappings[0]:
+                #     action_id = self.mappings[0][action_id]
+                # labels.append(action_id)
+            if self.usable_objectives[1]:
+                verb_id = self.video_list[index].label_verb
+                if self.mappings[1]:
+                    verb_id = self.mappings[1][verb_id]
+                labels.append(verb_id)
+            if self.usable_objectives[2]:
+                noun_id = self.video_list[index].label_noun
+                if self.mappings[2]:
+                    noun_id = self.mappings[2][noun_id]
+                labels.append(noun_id)
+
+            labels = np.array(labels, dtype=np.float32)
+            labels = np.concatenate((labels, points.flatten()))
+            if not self.validation:
+                return clip_input, labels
+            else:
+                return clip_input, labels, self.video_list[index].data_path
 
 
 class PointVectorSummedDatasetLoader(torchDataset):
