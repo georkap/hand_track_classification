@@ -15,6 +15,7 @@ import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 from torch.nn import DataParallel
+import dsntnn
 
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args, make_log_file_name
@@ -29,7 +30,24 @@ torch.set_printoptions(linewidth=1000000, threshold=1000000)
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
-def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, dataset, log_file):
+def calc_coord_loss(coords, heatmaps, target_var):
+    # Per-location euclidean losses
+    euc_losses = dsntnn.euclidean_losses(coords, target_var)  # shape:[B, D, L, 2] batch, depth, locations, feature
+    # Per-location regularization losses
+
+    reg_losses = []
+    for i in range(heatmaps.shape[1]):
+        hms = heatmaps[:, 1]
+        target = target_var[:, 1]
+        reg_loss = dsntnn.js_reg_losses(hms, target, sigma_t=1.0)
+        reg_losses.append(reg_loss)
+    reg_losses = torch.stack(reg_losses, 1)
+    # reg_losses = dsntnn.js_reg_losses(heatmaps, target_var, sigma_t=1.0) # shape: [B, D, L, 7, 7]
+    # Combine losses into an overall loss
+    coord_loss = dsntnn.average_loss(euc_losses + reg_losses)
+    return coord_loss
+
+def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
     losses = AverageMeter()
     top1_meters = [AverageMeter() for _ in range(num_outputs)]
@@ -41,9 +59,14 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
         model.eval()
         for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
             inputs = inputs.cuda()
+            outputs, coords, heatmaps = model(inputs)
             targets = targets.cuda().transpose(0, 1)
 
-            outputs = model(inputs)
+            if use_gaze or use_hands:
+                cls_targets = targets[:num_outputs, :].long()
+            else:
+                cls_targets = targets
+            assert len(cls_targets) == num_outputs
 
             losses_per_task = []
             for output, target in zip(outputs, targets):
@@ -51,6 +74,23 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
                 losses_per_task.append(loss_for_task)
 
             loss = sum(losses_per_task)
+
+            gaze_coord_loss, hand_coord_loss = 0, 0
+            if use_gaze:  # need some debugging for the gaze targets
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
+                # for a single shared layer representation of the two signals
+                # for gaze slice the first element
+                gaze_coords = coords[:, :, 0, :]
+                gaze_heatmaps = heatmaps[:, :, 0, :, :]
+                gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
+                loss = loss + gaze_coord_loss
+            if use_hands:
+                hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
+                # for hands slice the last two elements, first is left, second is right hand
+                hand_coords = coords[:, :, -2:, :]
+                hand_heatmaps = heatmaps[:, :, -2:, :]
+                hand_coord_loss = calc_coord_loss(hand_coords, hand_heatmaps, hand_targets)
+                loss = loss + hand_coord_loss
 
             batch_size = outputs[0].size(0)
 
@@ -60,14 +100,14 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, cur_epoch, d
                 for ind in range(num_outputs):
                     txt_batch_preds += ", "
                     res = np.argmax(outputs[ind][j].detach().cpu().numpy())
-                    label = targets[ind][j].detach().cpu().numpy()
+                    label = cls_targets[ind][j].detach().cpu().numpy()
                     task_outputs[ind].append([res, label])
                     txt_batch_preds += "T{} P-L:{}-{}".format(ind, res, label)
                 batch_preds.append(txt_batch_preds)
 
             losses.update(loss.item(), batch_size)
             for ind in range(num_outputs):
-                t1, t5 = accuracy(outputs[ind].detach().cpu(), targets[ind].detach().cpu(), topk=(1, 5))
+                t1, t5 = accuracy(outputs[ind].detach().cpu(), cls_targets[ind].detach().cpu(), topk=(1, 5))
                 top1_meters[ind].update(t1.item(), batch_size)
                 top5_meters[ind].update(t5.item(), batch_size)
                 loss_meters[ind].update(losses_per_task[ind].item(), batch_size)
@@ -99,7 +139,15 @@ def main():
     num_classes = [args.action_classes, args.verb_classes, args.noun_classes]
     validate = validate_mfnet_mo
 
-    model_ft = mfnet_3d(num_classes)
+    kwargs = {}
+    num_coords = 0
+    if args.use_gaze:
+        num_coords += 1
+    if args.use_hands:
+        num_coords += 2
+    kwargs['num_coords'] = num_coords
+
+    model_ft = mfnet_3d(num_classes, **kwargs)
     model_ft = torch.nn.DataParallel(model_ft).cuda()
     checkpoint = torch.load(args.ckpt_path, map_location={'cuda:1': 'cuda:0'})
     model_ft.load_state_dict(checkpoint['state_dict'])
@@ -124,6 +172,8 @@ def main():
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
         val_loader = FromVideoDatasetLoaderGulp(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
+                                                use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
+                                                use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
                                                 batch_transform=val_transforms, extra_nouns=False, validation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
@@ -132,8 +182,8 @@ def main():
                                                pin_memory=True)
 
         # evaluate dataset
-        top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, checkpoint['epoch'],
-                                 args.val_list.split("\\")[-1], log_file)
+        top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, args.use_gaze, args.use_hands,
+                                 checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
         # calculate statistics
         for ind in range(num_valid_classes):
