@@ -113,7 +113,7 @@ cln_noun_tracks_mh0
 temp_parsers*
 runs*
 gtea_hand_detection_tr*
-gtea_clips
+gtea_clips*
 
 # Project specific python scripts
 batch_*

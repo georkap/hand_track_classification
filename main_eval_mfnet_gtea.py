@@ -19,7 +19,7 @@ from torch.nn import DataParallel
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args, make_log_file_name
 from utils.file_utils import print_and_save
-from utils.dataset_loader import FromVideoDatasetLoaderGulp
+from utils.dataset_loader import FromVideoDatasetLoaderGulp, VideoFromImagesDatasetLoader
 from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize, CenterCrop
 from utils.calc_utils import eval_final_print_mt
 from utils.video_sampler import RandomSampling, MiddleSampling
@@ -75,10 +75,14 @@ def main():
         val_transforms = transforms.Compose([Resize((256, 256), False), crop_type,
                                              ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
-        val_loader = FromVideoDatasetLoaderGulp(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
-                                                use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
-                                                use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
-                                                batch_transform=val_transforms, extra_nouns=False, validation=True)
+        # val_loader = FromVideoDatasetLoaderGulp(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
+        #                                         use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
+        #                                         use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
+        #                                         batch_transform=val_transforms, extra_nouns=False, validation=True)
+        val_loader = VideoFromImagesDatasetLoader(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
+                                                  use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
+                                                  use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
+                                                  batch_transform=val_transforms, extra_nouns=False, validation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
                                                shuffle=False,

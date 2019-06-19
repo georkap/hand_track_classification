@@ -196,12 +196,23 @@ class GTEADataLine(object):
         self.data = row
         self.data_len = len(row)
 
-    def get_video_path(self, prefix):
+    def get_video_path(self, prefix): # only used for FromVideoDatasetLoader and is deprecated
         return os.path.join(prefix, self.id_recipe, self.data_path + '.mp4')
 
     @property
     def data_path(self):
         return self.data[0]
+
+    @property
+    def frames_path(self):
+        path_parts = os.path.normpath(self.data[0]).split(os.sep)
+        session_parts = path_parts[1].split('-')
+        session = session_parts[0] + '-' + session_parts[1] + '-' + session_parts[2]
+        return os.path.join(path_parts[0], session, path_parts[1])
+
+    @property
+    def instance_name(self):
+        return os.path.normpath(self.data[0]).split(os.sep)[1]
 
     @property
     def id_recipe(self):
@@ -398,8 +409,180 @@ class Video(object):
             self.cap = None
         return self
 
+class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from frames
+    OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
+    def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, img_tmpl='img_{:05d}.jpg',
+                 batch_transform=None, extra_nouns=False, use_gaze=False, gaze_list_prefix=None, use_hands=False,
+                 hand_list_prefix=None, validation=False, vis_data=False):
+        self.sampler = sampler
+        self.video_list = parse_samples_list(split_file, GTEADataLine)  # if line_type=='GTEA' else DataLine)
+        self.extra_nouns = extra_nouns
+        self.usable_objectives = list()
+        self.mappings = list()
+        for i, (objective, objective_name) in enumerate(zip(num_classes, FromVideoDatasetLoader.OBJECTIVE_NAMES)):
+            self.usable_objectives.append(objective > 0)
+            if objective != max_num_classes[i] and self.usable_objectives[-1]:
+                self.mappings.append(make_class_mapping_generic(self.video_list, objective_name))
+            else:
+                self.mappings.append(None)
+        assert any(obj is True for obj in self.usable_objectives)
+        self.transform = batch_transform
+        self.validation = validation
+        self.vis_data = vis_data
+        self.use_gaze = use_gaze
+        self.gaze_list_prefix = gaze_list_prefix
+        self.use_hands = use_hands
+        self.hand_list_prefix = hand_list_prefix
+        self.norm_val = [640., 480., 640., 480.]
+        self.image_tmpl = img_tmpl
+
+    def __len__(self):
+        return len(self.video_list)
+
+    def __getitem__(self, index):
+        path = self.video_list[index].frames_path
+        instance_name = self.video_list[index].instance_name
+        frame_count = len(os.listdir(path))
+        assert frame_count > 0
+
+        sampled_idxs = self.sampler.sampling(range_max=frame_count, v_id=index, start_frame=0)
+
+        sampled_frames = load_images(path, sampled_idxs, self.image_tmpl)
+
+        clip_input = np.concatenate(sampled_frames, axis=2)
+
+        gaze_points = None
+        if self.use_gaze:
+            pass
+        hand_points = None
+        if self.use_hands: # almost the same process as VideoAndPointDatasetLoader
+            hand_track_path = os.path.join(self.hand_list_prefix, instance_name + '.pkl')
+            hand_tracks = load_pickle(hand_track_path)
+
+            left_track = np.array(hand_tracks['left'], dtype=np.float32)
+            right_track = np.array(hand_tracks['right'], dtype=np.float32)
+
+            left_track = left_track[sampled_idxs]  # keep the points for the sampled frames
+            right_track = right_track[sampled_idxs]
+            if not self.vis_data:
+                left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
+                right_track = right_track[::2]
+
+            norm_val = self.norm_val
+            if self.transform is not None:
+                or_h, or_w, _ = clip_input.shape
+                clip_input = self.transform(clip_input) # have to put this line here for compatibility with the hand transform code
+                is_flipped = False
+                if 'RandomScale' in self.transform.transforms[
+                    0].__repr__():  # means we are in training so get the transformations
+                    sc_w, sc_h = self.transform.transforms[0].get_new_size()
+                    tl_y, tl_x = self.transform.transforms[1].get_tl()
+                    if 'RandomHorizontalFlip' in self.transform.transforms[2].__repr__():
+                        is_flipped = self.transform.transforms[2].is_flipped()
+                elif 'Resize' in self.transform.transforms[0].__repr__():  # means we are in testing
+                    sc_h, sc_w, _ = self.transform.transforms[0].get_new_shape()
+                    tl_y, tl_x = self.transform.transforms[1].get_tl()
+                else:
+                    sc_w = or_w
+                    sc_h = or_h
+                    tl_x = 0
+                    tl_y = 0
+
+                # apply transforms to tracks
+                scale_x = sc_w / or_w
+                scale_y = sc_h / or_h
+                left_track *= [scale_x, scale_y]
+                left_track -= [tl_x, tl_y]
+                right_track *= [scale_x, scale_y]
+                right_track -= [tl_x, tl_y]
+
+                _, _, max_h, max_w = clip_input.shape
+                norm_val = [max_w, max_h, max_w, max_h]
+                if is_flipped:
+                    left_track[:, 0] = max_w - left_track[:, 0]
+                    right_track[:, 0] = max_w - right_track[:, 0]
+
+            if self.vis_data:
+                left_track_vis = left_track
+                right_track_vis = right_track
+                left_track = left_track[::2]
+                right_track = right_track[::2]
+            # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
+            left_track = (left_track * 2 + 1) / norm_val[:2] - 1
+            right_track = (right_track * 2 + 1) / norm_val[2:] - 1
+            hand_points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
+            hand_points = hand_points.flatten()
+
+        # apply transforms on the video clip
+        if self.transform is not None and not (self.use_hands or self.use_gaze):
+            clip_input = self.transform(clip_input)
+
+        # get the labels for the tasks
+        labels = list()
+        if self.usable_objectives[0]:
+            action_id = self.video_list[index].label_action
+            if self.mappings[0]:
+                action_id = self.mappings[0][action_id]
+            labels.append(action_id)
+        if self.usable_objectives[1]:
+            verb_id = self.video_list[index].label_verb
+            if self.mappings[1]:
+                verb_id = self.mappings[1][verb_id]
+            labels.append(verb_id)
+        if self.usable_objectives[2]:
+            noun_id = self.video_list[index].label_noun
+            if self.mappings[2]:
+                noun_id = self.mappings[2][noun_id]
+            labels.append(noun_id)
+
+            if self.extra_nouns:
+                extra_nouns = self.video_list[index].extra_nouns
+                if self.mappings[2]:
+                    extra_nouns = [self.mappings[2][en] for en in extra_nouns]
+                for en in extra_nouns:
+                    labels.append(en)
+
+        if self.use_gaze or self.use_hands:
+            labels = np.array(labels, dtype=np.float32)
+        else:
+            labels = np.array(labels, dtype=np.int64)  # numpy array for pytorch dataloader compatibility
+        if self.use_gaze:
+            labels = np.concatenate((labels, gaze_points))
+        if self.use_hands:
+            labels = np.concatenate((labels, hand_points))
+
+        if self.vis_data:
+            # for i in range(len(sampled_frames)):
+            #     cv2.imshow('orig_img', sampled_frames[i])
+            #     cv2.imshow('transform', clip_input[:, i, :, :].numpy().transpose(1, 2, 0))
+            #     cv2.waitKey(0)
+
+            def vis_with_circle(img, left_point, right_point, winname):
+                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255, 0, 0), 4)
+                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0, 0, 255), 4)
+                cv2.imshow(winname, k)
+
+            orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+            orig_left = orig_left[sampled_idxs]
+            orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+            orig_right = orig_right[sampled_idxs]
+
+            for i in range(len(sampled_frames)):
+                vis_with_circle(sampled_frames[i], orig_left[i], orig_right[i], 'no augmentation')
+                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), left_track_vis[i], right_track_vis[i],
+                                'transformed')
+                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), orig_left[i], orig_right[i],
+                                'transf_img_not_coords')
+                cv2.waitKey(0)
+
+        if not self.validation:
+            return clip_input, labels
+        else:
+            return clip_input, labels, instance_name
+
+
 from gulpio import GulpDirectory
-class FromVideoDatasetLoaderGulp(torchDataset):
+class FromVideoDatasetLoaderGulp(torchDataset): #loads GTEA dataset from gulp
     OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
     def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None,
                  extra_nouns=False, use_gaze=False, gaze_list_prefix=None, use_hands=False, hand_list_prefix=None,
@@ -589,7 +772,7 @@ class FromVideoDatasetLoaderGulp(torchDataset):
             return clip_input, labels, self.video_list[index].data_path
 
 
-class FromVideoDatasetLoader(torchDataset):
+class FromVideoDatasetLoader(torchDataset): # loads gtea dataset from video files; not gonna be using anymore
     OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
     def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, batch_transform=None, extra_nouns=False,
                  validation=False, vis_data=False):
@@ -1284,7 +1467,8 @@ if __name__=='__main__':
     #video_list_file = r"D:\Code\hand_track_classification\splits\epic_rgb_select2_56_nd_brd\epic_rgb_train_1.txt"
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
     #point_list_prefix = 'hand_detection_tracks_lr001'
-    video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split2.txt"
+    # video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split2.txt"
+    video_list_file = r"splits\gtea_rgb_frames\test_split1.txt"
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
@@ -1308,9 +1492,13 @@ if __name__=='__main__':
     #                                     batch_transform=train_transforms, vis_data=True)
     # loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
     #                                 extra_nouns=False, validation=True, vis_data=False)
-    loader = FromVideoDatasetLoaderGulp(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
-                                        batch_transform=train_transforms, extra_nouns=False, validation=True,
-                                        vis_data=True, use_hands=True, hand_list_prefix=r"D:\Code\epic-kitchens-processing\output\gtea_hand_trackslr005\clean")
+    # loader = FromVideoDatasetLoaderGulp(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
+    #                                     batch_transform=train_transforms, extra_nouns=False, validation=True,
+    #                                     vis_data=True, use_hands=True, hand_list_prefix=r"D:\Code\epic-kitchens-processing\output\gtea_hand_trackslr005\clean")
+    loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
+                                          batch_transform=train_transforms, extra_nouns=False, validation=True,
+                                          vis_data=True, use_hands=True,
+                                          hand_list_prefix=r"gtea_hand_detection_tracks_lr005")
 
     for i in range(len(loader)):
         item = loader.__getitem__(i)
