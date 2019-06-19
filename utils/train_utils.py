@@ -671,7 +671,7 @@ def train_mfnet_mo(model, optimizer, criterion, train_iterator, num_outputs, use
 
         gaze_coord_loss, hand_coord_loss = 0, 0
         if use_gaze:  # need some debugging for the gaze targets
-            gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
+            gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1,0).reshape(-1, 8, 2)
             # for a single shared layer representation of the two signals
             # for gaze slice the first element
             gaze_coords = coords[:, :, 0, :]
@@ -679,7 +679,7 @@ def train_mfnet_mo(model, optimizer, criterion, train_iterator, num_outputs, use
             gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
             loss = loss + gaze_coord_loss
         if use_hands:
-            hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
+            hand_targets = targets[-32:, :].transpose(1,0).reshape(-1, 8, 2, 2)
             # for hands slice the last two elements, first is left, second is right hand
             hand_coords = coords[:, :, -2:, :]
             hand_heatmaps = heatmaps[:, :, -2:, :]
@@ -751,7 +751,7 @@ def test_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_ha
             loss = sum(losses_per_task)
 
             if use_gaze:  # need some debugging for the gaze targets
-                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1,0).reshape(-1, 8, 2)
                 # for a single shared layer representation of the two signals
                 # for gaze slice the first element
                 gaze_coords = coords[:, :, 0, :]
@@ -759,7 +759,7 @@ def test_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_ha
                 gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
                 loss = loss + gaze_coord_loss
             if use_hands:
-                hand_targets = targets[-32:, :].reshape(-1, 8, 2, 2)
+                hand_targets = targets[-32:, :].transpose(1,0).reshape(-1, 8, 2, 2)
                 # for hands slice the last two elements, first is left, second is right hand
                 hand_coords = coords[:, :, -2:, :]
                 hand_heatmaps = heatmaps[:, :, -2:, :]
