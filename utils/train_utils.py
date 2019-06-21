@@ -620,8 +620,8 @@ def calc_coord_loss(coords, heatmaps, target_var):
 
     reg_losses = []
     for i in range(heatmaps.shape[1]):
-        hms = heatmaps[:, 1]
-        target = target_var[:, 1]
+        hms = heatmaps[:, i]
+        target = target_var[:, i]
         reg_loss = dsntnn.js_reg_losses(hms, target, sigma_t=1.0)
         reg_losses.append(reg_loss)
     reg_losses = torch.stack(reg_losses, 1)
@@ -671,11 +671,13 @@ def train_mfnet_mo(model, optimizer, criterion, train_iterator, num_outputs, use
 
         gaze_coord_loss, hand_coord_loss = 0, 0
         if use_gaze:  # need some debugging for the gaze targets
-            gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1,0).reshape(-1, 8, 2)
+            gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1,0).reshape(-1, 8, 1, 2)
             # for a single shared layer representation of the two signals
             # for gaze slice the first element
             gaze_coords = coords[:, :, 0, :]
-            gaze_heatmaps = heatmaps[:, :, 0, :, :]
+            gaze_coords.unsqueeze_(2) # unsqueeze to add the extra dimension for consistency
+            gaze_heatmaps = heatmaps[:, :, 0, :]
+            gaze_heatmaps.unsqueeze_(2)
             gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
             loss = loss + gaze_coord_loss
         if use_hands:
@@ -751,11 +753,13 @@ def test_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_ha
             loss = sum(losses_per_task)
 
             if use_gaze:  # need some debugging for the gaze targets
-                gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1,0).reshape(-1, 8, 2)
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1, 0).reshape(-1, 8, 1, 2)
                 # for a single shared layer representation of the two signals
                 # for gaze slice the first element
                 gaze_coords = coords[:, :, 0, :]
-                gaze_heatmaps = heatmaps[:, :, 0, :, :]
+                gaze_coords.unsqueeze_(2)  # unsqueeze to add the extra dimension for consistency
+                gaze_heatmaps = heatmaps[:, :, 0, :]
+                gaze_heatmaps.unsqueeze_(2)
                 gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
                 loss = loss + gaze_coord_loss
             if use_hands:

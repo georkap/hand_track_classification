@@ -450,16 +450,27 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
         sampled_frames = load_images(path, sampled_idxs, self.image_tmpl)
 
         clip_input = np.concatenate(sampled_frames, axis=2)
+        or_h, or_w, _ = clip_input.shape
 
-        gaze_points = None
+        # gaze points is the final output, gaze data is the pickle data, gaze track is intermediate versions
+        gaze_points, gaze_data, gaze_track = None, None, None
         if self.use_gaze:
-            pass
-        hand_points = None
+            gaze_track_path = os.path.join(self.gaze_list_prefix, instance_name + '.pkl')
+            gaze_data = load_pickle(gaze_track_path)
+
+            gaze_track = np.array([[value[0], value[1]] for key, value in gaze_data.items()], dtype=np.float32)
+            gaze_track = gaze_track[sampled_idxs]
+            if not self.vis_data:
+                gaze_track = gaze_track[::2]
+            gaze_track *= self.norm_val[:2] # probably slower like this, but more robust following hand method
+
+        # hands points is the final output, hand tracks is pickle, left and right track are intermediate versions
+        hand_points, hand_tracks, left_track, right_track = None, None, None, None
         if self.use_hands: # almost the same process as VideoAndPointDatasetLoader
             hand_track_path = os.path.join(self.hand_list_prefix, instance_name + '.pkl')
             hand_tracks = load_pickle(hand_track_path)
 
-            left_track = np.array(hand_tracks['left'], dtype=np.float32)
+            left_track = np.array(hand_tracks['left'], dtype=np.float32) # last point is never used, it is after a bug of the tracker
             right_track = np.array(hand_tracks['right'], dtype=np.float32)
 
             left_track = left_track[sampled_idxs]  # keep the points for the sampled frames
@@ -468,10 +479,12 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
                 left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
                 right_track = right_track[::2]
 
-            norm_val = self.norm_val
-            if self.transform is not None:
-                or_h, or_w, _ = clip_input.shape
-                clip_input = self.transform(clip_input) # have to put this line here for compatibility with the hand transform code
+        # apply transforms on the video clip
+        if self.transform is not None:
+            clip_input = self.transform(clip_input)
+            _, _, max_h, max_w = clip_input.shape
+
+            if self.use_hands or self.use_gaze:
                 is_flipped = False
                 if 'RandomScale' in self.transform.transforms[
                     0].__repr__():  # means we are in training so get the transformations
@@ -491,31 +504,34 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
                 # apply transforms to tracks
                 scale_x = sc_w / or_w
                 scale_y = sc_h / or_h
-                left_track *= [scale_x, scale_y]
-                left_track -= [tl_x, tl_y]
-                right_track *= [scale_x, scale_y]
-                right_track -= [tl_x, tl_y]
-
-                _, _, max_h, max_w = clip_input.shape
                 norm_val = [max_w, max_h, max_w, max_h]
-                if is_flipped:
-                    left_track[:, 0] = max_w - left_track[:, 0]
-                    right_track[:, 0] = max_w - right_track[:, 0]
+                if self.use_hands:
+                    left_track *= [scale_x, scale_y]
+                    left_track -= [tl_x, tl_y]
+                    right_track *= [scale_x, scale_y]
+                    right_track -= [tl_x, tl_y]
 
-            if self.vis_data:
-                left_track_vis = left_track
-                right_track_vis = right_track
-                left_track = left_track[::2]
-                right_track = right_track[::2]
-            # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
-            left_track = (left_track * 2 + 1) / norm_val[:2] - 1
-            right_track = (right_track * 2 + 1) / norm_val[2:] - 1
-            hand_points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
-            hand_points = hand_points.flatten()
+                    if is_flipped:
+                        left_track[:, 0] = max_w - left_track[:, 0] # apply flipping on x axis
+                        right_track[:, 0] = max_w - right_track[:, 0]
 
-        # apply transforms on the video clip
-        if self.transform is not None and not (self.use_hands or self.use_gaze):
-            clip_input = self.transform(clip_input)
+                    if self.vis_data:
+                        left_track_vis = left_track
+                        right_track_vis = right_track
+                        left_track = left_track[::2]
+                        right_track = right_track[::2]
+                    # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
+                    left_track = (left_track * 2 + 1) / norm_val[:2] - 1
+                    right_track = (right_track * 2 + 1) / norm_val[2:] - 1
+                if self.use_gaze:
+                    gaze_track *= [scale_x, scale_y]
+                    gaze_track -= [tl_x, tl_y]
+                    if is_flipped:
+                        gaze_track[:, 0] = max_w - gaze_track[:, 0] # flip x axis
+                    if self.vis_data:
+                        gaze_track_vis = gaze_track
+                        gaze_track = gaze_track[::2]
+                    gaze_track = (gaze_track * 2 + 1) / norm_val[:2] - 1
 
         # get the labels for the tasks
         labels = list()
@@ -547,8 +563,11 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
         else:
             labels = np.array(labels, dtype=np.int64)  # numpy array for pytorch dataloader compatibility
         if self.use_gaze:
+            gaze_points = gaze_track.astype(np.float32).flatten()
             labels = np.concatenate((labels, gaze_points))
         if self.use_hands:
+            hand_points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
+            hand_points = hand_points.flatten()
             labels = np.concatenate((labels, hand_points))
 
         if self.vis_data:
@@ -556,24 +575,34 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
             #     cv2.imshow('orig_img', sampled_frames[i])
             #     cv2.imshow('transform', clip_input[:, i, :, :].numpy().transpose(1, 2, 0))
             #     cv2.waitKey(0)
-
             def vis_with_circle(img, left_point, right_point, winname):
-                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255, 0, 0), 4)
-                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0, 0, 255), 4)
+                k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255, 0, 0), 4) # blue is left
+                k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0, 0, 255), 4) # red is right
+                cv2.imshow(winname, k)
+            def vis_with_circle_gaze(img, gaze_point, winname):
+                k = cv2.circle(img.copy(), (int(gaze_point[0]), int(gaze_point[1])), 10, (0, 255, 0), 4) # green is gaze
                 cv2.imshow(winname, k)
 
-            orig_left = np.array(hand_tracks['left'], dtype=np.float32)
-            orig_left = orig_left[sampled_idxs]
-            orig_right = np.array(hand_tracks['right'], dtype=np.float32)
-            orig_right = orig_right[sampled_idxs]
+            if self.use_hands:
+                orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+                orig_left = orig_left[sampled_idxs]
+                orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+                orig_right = orig_right[sampled_idxs]
 
-            for i in range(len(sampled_frames)):
-                vis_with_circle(sampled_frames[i], orig_left[i], orig_right[i], 'no augmentation')
-                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), left_track_vis[i], right_track_vis[i],
-                                'transformed')
-                vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), orig_left[i], orig_right[i],
-                                'transf_img_not_coords')
-                cv2.waitKey(0)
+                for i in range(len(sampled_frames)):
+                    vis_with_circle(sampled_frames[i], orig_left[i], orig_right[i], 'hands no aug')
+                    vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), left_track_vis[i], right_track_vis[i],
+                                    'hands transformed')
+                    vis_with_circle(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), orig_left[i], orig_right[i],
+                                    'hands trans. img not coords')
+                    cv2.waitKey(0)
+            if self.use_gaze:
+                orig_gaze = np.array([[value[0], value[1]] for key, value in gaze_data.items()], dtype=np.float32)[sampled_idxs]
+                for i in range(len(sampled_frames)):
+                    vis_with_circle_gaze(sampled_frames[i], orig_gaze[i]*self.norm_val[:2], 'gaze no aug')
+                    vis_with_circle_gaze(clip_input[:, i, :, :].numpy().transpose(1, 2, 0), gaze_track_vis[i], 'gaze transformed')
+                    vis_with_circle_gaze(clip_input[:,i, :, :].numpy().transpose(1, 2, 0), orig_gaze[i]*self.norm_val[:2], 'gaze trans. img not coords')
+                    cv2.waitKey(0)
 
         if not self.validation:
             return clip_input, labels
@@ -1477,7 +1506,7 @@ if __name__=='__main__':
     mean_3d = [124 / 255, 117 / 255, 104 / 255]
     std_3d = [0.229, 0.224, 0.225]
 
-    seed = 0
+    seed = 1
     train_transforms = transforms.Compose([
         RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288], seed=seed),
         RandomCrop((224, 224), seed=seed), RandomHorizontalFlip(seed=seed), RandomHLS(vars=[15, 35, 25]),
@@ -1497,12 +1526,13 @@ if __name__=='__main__':
     #                                     vis_data=True, use_hands=True, hand_list_prefix=r"D:\Code\epic-kitchens-processing\output\gtea_hand_trackslr005\clean")
     loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
                                           batch_transform=train_transforms, extra_nouns=False, validation=True,
-                                          vis_data=True, use_hands=True,
-                                          hand_list_prefix=r"gtea_hand_detection_tracks_lr005")
+                                          vis_data=True,
+                                          use_hands=False, hand_list_prefix=r"gtea_hand_detection_tracks_lr005",
+                                          use_gaze=True, gaze_list_prefix=r"gtea_gaze_tracks")
 
-    for i in range(len(loader)):
-        item = loader.__getitem__(i)
-        print("\rItem {} ok".format(i))
+    for ind in range(len(loader)):
+        item = loader.__getitem__(ind)
+        print("\rItem {} ok".format(ind))
 
 #    from dataset_loader_utils import Resize, ResizePadFirst
 #    
