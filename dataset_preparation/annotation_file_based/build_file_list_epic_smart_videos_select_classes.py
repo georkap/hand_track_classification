@@ -34,7 +34,7 @@ assert len(available_pids) == 28
 if baradel_split:
     split_1 = {}
     for i in range(len(available_pids)):
-        split_1[available_pids[i]] = "train" if i < 26 else "val"
+        split_1[available_pids[i]] = "train" if i < 26 else "val" # Note:23/6/19.this is a bug. The actual baradel split is my previous split1
     split_dicts = [split_1]
 else:
     split_1, split_2, split_3, split_4 = {}, {}, {}, {}

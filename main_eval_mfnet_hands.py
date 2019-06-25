@@ -94,7 +94,8 @@ def main():
         for ind in range(num_valid_classes):
             video_preds = [x[0] for x in outputs[ind]]
             video_labels = [x[1] for x in outputs[ind]]
-            mean_cls_acc, top1_acc = eval_final_print_mt(video_preds, video_labels, ind, valid_classes[ind], log_file)
+            mean_cls_acc, top1_acc = eval_final_print_mt(video_preds, video_labels, ind, valid_classes[ind], log_file,
+                                                         args.annotations_path, args.val_list)
             overall_mean_cls_acc[ind] += mean_cls_acc
             overall_top1[ind] += top1_acc
 

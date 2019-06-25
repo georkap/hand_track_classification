@@ -822,12 +822,14 @@ def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, us
             loss = sum(losses_per_task)
 
             gaze_coord_loss, hand_coord_loss = 0, 0
-            if use_gaze:  # need some debugging for the gaze targets
-                gaze_targets = targets[num_outputs:num_outputs + 16, :].reshape(-1, 8, 2)
+            if use_gaze:
+                gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1, 0).reshape(-1, 8, 1, 2)
                 # for a single shared layer representation of the two signals
                 # for gaze slice the first element
                 gaze_coords = coords[:, :, 0, :]
-                gaze_heatmaps = heatmaps[:, :, 0, :, :]
+                gaze_coords.unsqueeze_(2)  # unsqueeze to add the extra dimension for consistency
+                gaze_heatmaps = heatmaps[:, :, 0, :]
+                gaze_heatmaps.unsqueeze_(2)
                 gaze_coord_loss = calc_coord_loss(gaze_coords, gaze_heatmaps, gaze_targets)
                 loss = loss + gaze_coord_loss
             if use_hands:
