@@ -33,7 +33,7 @@ def make_base_parser(val):
 
 def parse_args_dataset(parser, net_type):
     # Dataset parameters
-    parser.add_argument('--action_classes', type=int, default=0) # only for gtea, max gtea:106
+    parser.add_argument('--action_classes', type=int, default=0) # max epix:2521 in the old version of epic_train_action_labels.csv, max gtea:106
     parser.add_argument('--verb_classes', type=int, default=120) # max epic:125, gtea:19
     parser.add_argument('--noun_classes', type=int, default=0) # max epic:322, gtea:53
     parser.add_argument('--batch_size', type=int, default=1)

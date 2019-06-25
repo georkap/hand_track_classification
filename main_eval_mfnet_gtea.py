@@ -33,7 +33,7 @@ std_3d = [0.229, 0.224, 0.225]
 GTEA_CLASSES = [106, 19, 53]
 def main():
     args = parse_args('mfnet', val=True)
-    
+
     output_dir = os.path.dirname(args.ckpt_path)
     log_file = make_log_file_name(output_dir, args)
     print_and_save(args, log_file)

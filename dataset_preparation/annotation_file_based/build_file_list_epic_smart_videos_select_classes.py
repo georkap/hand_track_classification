@@ -15,8 +15,8 @@ import pandas
 get_track_class = lambda x: int(x.split('_')[1])
 
 
-# selected_classes = None
-selected_classes = [0, 1]
+selected_classes = None
+# selected_classes = [0, 1]
 # selected_classes = [5,6]
 # selected_classes = [5, 6, 7, 8]
 # selected_classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 18, 19, 20, 21, 22, 23, 32]
@@ -25,6 +25,7 @@ nd = True
 # nd = False
 
 baradel_split = True
+actions = True # this is used to add an action annotation in the epic split files
 
 bad_uids = [126, 961, 5099, 12599, 21740, 25710, 26811, 28585, 33647, 37431]
 unavailable = [9, 11, 18]
@@ -46,14 +47,18 @@ else:
     split_dicts = [split_1, split_2, split_3, split_4]
 
 BASE_DIR = r"frames_rgb_flow\rgb\train"
-# SPLITS_DIR = r"..\..\splits\epic_rgb"
-SPLITS_DIR = r"..\..\splits\epic_rgb_select2_01"
+SPLITS_DIR = r"..\..\splits\epic_rgb"
+# SPLITS_DIR = r"..\..\splits\epic_rgb_select2_01"
 # SPLITS_DIR = r"..\..\splits\epic_rgb_select24"
 # SPLITS_DIR = r"..\..\splits\epic_rgb_select2_56"
 if nd:
     SPLITS_DIR += '_nd'
 if baradel_split:
     SPLITS_DIR += '_brd'
+if actions:
+    SPLITS_DIR += '_act'
+    ACTIONS_FILE = r"D:\Datasets\egocentric\EPIC_KITCHENS\EPIC_action_classes.csv"
+    all_action_ids = pandas.read_csv(ACTIONS_FILE)
 os.makedirs(SPLITS_DIR, exist_ok=True)
 
 train_names = [os.path.join(SPLITS_DIR, "epic_rgb_train_{}.txt".format(i)) for i in range(1, len(split_dicts) + 1)] # in range(1,5)
@@ -80,9 +85,14 @@ for index, row in annotations.iterrows():
     uid = row.uid
     if nd and uid in bad_uids:
         continue
+    if actions:
+        action_id = all_action_ids[all_action_ids.class_key == '{}_{}'.format(verb_class, noun_class)].action_id.item()
     videoid = row.video_id
     action_dir = os.path.join(BASE_DIR, pid, videoid)
-    line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb_class, noun_class, uid, start_frame)
+    if actions:
+        line = "{} {} {} {} {} {} {}\n".format(action_dir, num_frames, verb_class, noun_class, uid, start_frame, action_id)
+    else:
+        line = "{} {} {} {} {} {}\n".format(action_dir, num_frames, verb_class, noun_class, uid, start_frame)
     for i in range(len(split_dicts)):
         split = split_dicts[i][pid]
         if split == 'train':

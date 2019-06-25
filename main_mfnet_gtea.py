@@ -6,7 +6,11 @@ main train mfnet
 
 @author: Γιώργος
 """
+
 import torch
+from torch.optim import SGD
+from torch.nn import DataParallel
+from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
 
@@ -26,10 +30,10 @@ def main():
     model_name = 'gtea_' + model_name
     output_dir, log_file = init_folders(args.base_output_dir, model_name, args.resume, args.logging)
     print_and_save(args, log_file)
-    print_and_save("Model name: {}".format(model_name), log_file)    
+    print_and_save("Model name: {}".format(model_name), log_file)
     cudnn.benchmark = True
-    
-    mfnet_3d = MFNET_3D_MO # mfnet 3d multi output
+
+    mfnet_3d = MFNET_3D_MO  # mfnet 3d multi output
     kwargs = {}
     num_coords = 0
     objectives_text = "Objectives: "
@@ -39,11 +43,9 @@ def main():
         objectives_text += " actions {}, ".format(args.action_classes)
         num_objectives += 1
     if args.verb_classes > 0:
-        # num_classes.append(args.verb_classes)
         objectives_text += " verbs {}, ".format(args.verb_classes)
         num_objectives += 1
     if args.noun_classes > 0:
-        # num_classes.append(args.noun_classes)
         objectives_text += " nouns {}, ".format(args.noun_classes)
         num_objectives += 1
     if args.use_gaze:
@@ -62,9 +64,9 @@ def main():
     if args.pretrained:
         checkpoint = torch.load(args.pretrained_model_path)
         # below line is needed if network is trained with DataParallel
-        base_dict = {'.'.join(k.split('.')[1:]): v for k,v in list(checkpoint['state_dict'].items())}
-        base_dict = {k:v for k, v in list(base_dict.items()) if 'classifier' not in k}
-        model_ft.load_state_dict(base_dict, strict=False) #model.load_state_dict(checkpoint['state_dict'])
+        base_dict = {'.'.join(k.split('.')[1:]): v for k, v in list(checkpoint['state_dict'].items())}
+        base_dict = {k: v for k, v in list(base_dict.items()) if 'classifier' not in k}
+        model_ft.load_state_dict(base_dict, strict=False)  # model.load_state_dict(checkpoint['state_dict'])
     model_ft.cuda(device=args.gpus[0])
     model_ft = torch.nn.DataParallel(model_ft, device_ids=args.gpus, output_device=args.gpus[0])
     print_and_save("Model loaded on gpu {} devices".format(args.gpus), log_file)
@@ -75,9 +77,9 @@ def main():
     # load dataset and train and validation iterators
     train_sampler = prepare_sampler("train", args.clip_length, args.frame_interval)
     train_transforms = transforms.Compose([
-            RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
-            RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
-            ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+        RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
+        RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
+        ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     # train_loader = FromVideoDatasetLoaderGulp(train_sampler, args.train_list, 'GTEA', num_classes, GTEA_CLASSES,
     #                                           use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
     #                                           use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
@@ -89,10 +91,10 @@ def main():
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
-    
+
     test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
-    test_transforms=transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-                                        ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+    test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
+                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     # test_loader = FromVideoDatasetLoaderGulp(test_sampler, args.test_list, 'GTEA', num_classes, GTEA_CLASSES,
     #                                          use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
     #                                          use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
@@ -147,8 +149,9 @@ def main():
                      "Train", log_file, args.gpus)
             new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, args.use_gaze, args.use_hands, epoch,
                             "Test", log_file, args.gpus)
-            top1 = save_mt_checkpoints(model_ft, optimizer, top1, new_top1,
-                                       args.save_all_weights, output_dir, model_name, epoch, log_file)
-            
+            top1 = save_mt_checkpoints(model_ft, optimizer, top1, new_top1, args.save_all_weights, output_dir,
+                                       model_name, epoch, log_file)
+
+
 if __name__ == '__main__':
     main()

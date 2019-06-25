@@ -8,12 +8,13 @@ main eval mfnet hands
 """
 
 import os
-import torch
 import numpy as np
-from torch.utils.data import DataLoader
-from torch.nn import DataParallel
+
+import torch
 import torch.backends.cudnn as cudnn
 import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from torch.nn import DataParallel
 
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args, make_log_file_name
@@ -29,7 +30,7 @@ torch.set_printoptions(linewidth=1000000, threshold=1000000)
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
-
+EPIC_CLASSES = [2521, 125, 322]
 def main():
     args = parse_args('mfnet', val=True)
 
@@ -46,7 +47,7 @@ def main():
     num_coords = 0
     # if args.use_gaze:
     #     num_coords += 1
-    if True: #args.use_hands:
+    if args.use_hands:
         num_coords += 2
     kwargs['num_coords'] = num_coords
 
@@ -80,14 +81,14 @@ def main():
         val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list, point_list_prefix=args.bpv_prefix,
                                                 num_classes=num_classes, img_tmpl='frame_{:010d}.jpg',
                                                 norm_val=[456., 256., 456., 256.], batch_transform=val_transforms,
-                                                validation=True)
+                                                use_hands=args.use_hands, validation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
                                                shuffle=False,
                                                num_workers=args.num_workers,
                                                pin_memory=True)
 
-        top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, False, True,
+        top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, False, args.use_hands,
                                  checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
         # calculate statistics

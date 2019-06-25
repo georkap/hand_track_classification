@@ -188,8 +188,11 @@ class DataLine(object):
 
     @property
     def start_frame(self):
-        return int(self.data[5] if len(self.data) == 6 else -1)
+        return int(self.data[5] if len(self.data) > 5 else -1)
 
+    @property
+    def label_action(self):
+        return int(self.data[6] if len(self.data) > 6 else -1)
 
 class GTEADataLine(object):
     def __init__(self, row):
@@ -1232,9 +1235,9 @@ class PointDatasetLoader(torchDataset):
 
 
 class VideoAndPointDatasetLoader(torchDataset):
-    EPIC_MAX_CLASSES = [0, 125, 322]
+    EPIC_MAX_CLASSES = [2521, 125, 322]
     def __init__(self, sampler, video_list_file, point_list_prefix, num_classes, img_tmpl='img_{:05d}.jpg', # removed predefined argument from num_classes
-                 norm_val=None, batch_transform=None, validation=False, vis_data=False):
+                 norm_val=None, batch_transform=None, use_hands=True, validation=False, vis_data=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(video_list_file, DataLine)
 
@@ -1255,6 +1258,7 @@ class VideoAndPointDatasetLoader(torchDataset):
                     self.mappings.append(None)
             assert any(obj is True for obj in self.usable_objectives)
         self.point_list_prefix = point_list_prefix
+        self.use_hands = use_hands
         self.image_tmpl = img_tmpl
         self.transform = batch_transform
         self.validation = validation
@@ -1276,80 +1280,84 @@ class VideoAndPointDatasetLoader(torchDataset):
         sampled_frames = load_images(self.video_list[index].data_path, sampled_idxs, self.image_tmpl)
 
         clip_input = np.concatenate(sampled_frames, axis=2)
+        or_h, or_w, _ = clip_input.shape
 
-        a, b, c, pid, vid_id = self.video_list[index].data_path.split("\\")
-        track_path = os.path.join(self.point_list_prefix, pid, vid_id,
-                                  "{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
-        hand_tracks = load_pickle(track_path)
-        # hand_tracks = load_pickle(self.samples_list[index].data_path)
+        hand_points, hand_tracks, left_track, right_track = None, None, None, None
+        if self.use_hands: # load and downsample the hand tracks
+            a, b, c, pid, vid_id = self.video_list[index].data_path.split("\\")
+            track_path = os.path.join(self.point_list_prefix, pid, vid_id,"{}_{}_{}.pkl".format(start_frame, label_verb, label_noun))
+            hand_tracks = load_pickle(track_path)
+            # hand_tracks = load_pickle(self.samples_list[index].data_path)
 
-        left_track = np.array(hand_tracks['left'], dtype=np.float32)
-        right_track = np.array(hand_tracks['right'], dtype=np.float32)
-        assert (self.video_list[index].num_frames + 1 == len(left_track)) # add + 1 because in the epic annotations the last frame is inclusive
+            left_track = np.array(hand_tracks['left'], dtype=np.float32)
+            right_track = np.array(hand_tracks['right'], dtype=np.float32)
+            assert (self.video_list[index].num_frames + 1 == len(left_track)) # add + 1 because in the epic annotations the last frame is inclusive
 
-        idxs = (np.array(sampled_idxs) - start_frame).astype(np.int)
-        left_track = left_track[idxs]  # keep the points for the sampled frames
-        right_track = right_track[idxs]
-        left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
-        right_track = right_track[::2]
+            idxs = (np.array(sampled_idxs) - start_frame).astype(np.int)
+            left_track = left_track[idxs]  # keep the points for the sampled frames
+            right_track = right_track[idxs]
+            left_track = left_track[::2]  # keep 1 coordinate pair for every two frames because we supervise 8 outputs from the temporal dim of mfnet and not 16 as the inputs
+            right_track = right_track[::2]
 
-        norm_val = self.norm_val
-        if self.transform is not None:
-            or_h, or_w, _ = clip_input.shape
-            # for i in range(10):
+        if self.transform is not None: # apply transforms on the video clip
             clip_input = self.transform(clip_input)
-            is_flipped = False
-            if 'RandomScale' in self.transform.transforms[0].__repr__(): # means we are in training so get the transformations
-                sc_w, sc_h = self.transform.transforms[0].get_new_size()
-                tl_y, tl_x = self.transform.transforms[1].get_tl()
-                if 'RandomHorizontalFlip' in self.transform.transforms[2].__repr__():
-                    is_flipped = self.transform.transforms[2].is_flipped()
-            elif 'Resize' in self.transform.transforms[0].__repr__():  # means we are in testing
-                sc_h, sc_w, _ = self.transform.transforms[0].get_new_shape()
-                tl_y, tl_x = self.transform.transforms[1].get_tl()
-            else:
-                sc_w = or_w
-                sc_h = or_h
-                tl_x = 0
-                tl_y = 0
+            _, _, max_h, max_w = clip_input.shape
 
-            # apply transforms to tracks
-            scale_x = sc_w/or_w
-            scale_y = sc_h/or_h
-            left_track *= [scale_x, scale_y]
-            left_track -= [tl_x, tl_y]
-            right_track *= [scale_x, scale_y]
-            right_track -= [tl_x, tl_y]
+        if self.use_hands:
+            norm_val = self.norm_val
+            if self.transform is not None: # calculate transforms on the hand coordinates
+                is_flipped = False
+                if 'RandomScale' in self.transform.transforms[0].__repr__(): # means we are in training so get the transformations
+                    sc_w, sc_h = self.transform.transforms[0].get_new_size()
+                    tl_y, tl_x = self.transform.transforms[1].get_tl()
+                    if 'RandomHorizontalFlip' in self.transform.transforms[2].__repr__():
+                        is_flipped = self.transform.transforms[2].is_flipped()
+                elif 'Resize' in self.transform.transforms[0].__repr__():  # means we are in testing
+                    sc_h, sc_w, _ = self.transform.transforms[0].get_new_shape()
+                    tl_y, tl_x = self.transform.transforms[1].get_tl()
+                else:
+                    sc_w = or_w
+                    sc_h = or_h
+                    tl_x = 0
+                    tl_y = 0
 
-            _,_, max_h, max_w = clip_input.shape
-            norm_val = [max_w, max_h, max_w, max_h]
-            if is_flipped:
-                left_track[:, 0] = max_w - left_track[:, 0]
-                right_track[:, 0] = max_w - right_track[:, 0]
+                # apply transforms to tracks
+                scale_x = sc_w/or_w
+                scale_y = sc_h/or_h
+                left_track *= [scale_x, scale_y]
+                left_track -= [tl_x, tl_y]
+                right_track *= [scale_x, scale_y]
+                right_track -= [tl_x, tl_y]
 
-            if self.vis_data:
-                def vis_with_circle(img, left_point, right_point, winname):
-                    k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255,0,0), 4)
-                    k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0,0,255), 4)
-                    cv2.imshow(winname, k)
+                _,_, max_h, max_w = clip_input.shape
+                norm_val = [max_w, max_h, max_w, max_h]
+                if is_flipped:
+                    left_track[:, 0] = max_w - left_track[:, 0]
+                    right_track[:, 0] = max_w - right_track[:, 0]
 
-                orig_left = np.array(hand_tracks['left'], dtype=np.float32)
-                orig_left = orig_left[idxs]
-                orig_right = np.array(hand_tracks['right'], dtype=np.float32)
-                orig_right = orig_right[idxs]
+                if self.vis_data:
+                    def vis_with_circle(img, left_point, right_point, winname):
+                        k = cv2.circle(img.copy(), (int(left_point[0]), int(left_point[1])), 10, (255,0,0), 4)
+                        k = cv2.circle(k, (int(right_point[0]), int(right_point[1])), 10, (0,0,255), 4)
+                        cv2.imshow(winname, k)
 
-                vis_with_circle(sampled_frames[-1], orig_left[-1], orig_right[-1], 'no augmentation')
-                vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
-                vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'transf_img_not_coords')
-                cv2.waitKey(0)
+                    orig_left = np.array(hand_tracks['left'], dtype=np.float32)
+                    orig_left = orig_left[idxs]
+                    orig_right = np.array(hand_tracks['right'], dtype=np.float32)
+                    orig_right = orig_right[idxs]
 
-        # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
-        left_track = (left_track * 2 + 1) / norm_val[:2] - 1
-        right_track = (right_track * 2 + 1) / norm_val[2:] - 1
-        # print("transformed:", left_track, "\n",right_track)
-        # print("original:", (2*orig_left[::2]+1)/self.norm_val[:2]-1, "\n", (2*orig_right[::2]+1)/self.norm_val[2:]-1)
+                    vis_with_circle(sampled_frames[-1], orig_left[-1], orig_right[-1], 'no augmentation')
+                    vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), left_track[-1], right_track[-1], 'transformed')
+                    vis_with_circle(clip_input[:,-1,:,:].numpy().transpose(1,2,0), orig_left[-1], orig_right[-1], 'transf_img_not_coords')
+                    cv2.waitKey(0)
 
-        points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
+            # for the DSNT layer normalize to [-1, 1] for x and to [-1, 2] for y, which can get values greater than +1 when the hand is originally not detected
+            left_track = (left_track * 2 + 1) / norm_val[:2] - 1
+            right_track = (right_track * 2 + 1) / norm_val[2:] - 1
+            # print("transformed:", left_track, "\n",right_track)
+            # print("original:", (2*orig_left[::2]+1)/self.norm_val[:2]-1, "\n", (2*orig_right[::2]+1)/self.norm_val[2:]-1)
+
+            hand_points = np.concatenate((left_track[:, np.newaxis, :], right_track[:, np.newaxis, :]), axis=1).astype(np.float32)
 
         if self.usable_objectives is None: # old workflow only for verbs and hands
             if self.mapping:
@@ -1358,18 +1366,17 @@ class VideoAndPointDatasetLoader(torchDataset):
                 class_id = label_verb
 
             if not self.validation:
-                return clip_input, class_id, points
+                return clip_input, class_id, hand_points
             else:
-                return clip_input, class_id, points, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
+                return clip_input, class_id, hand_points, self.video_list[index].uid #self.video_list[index].data_path.split("\\")[-1]
         else: # new multitask workflow
             # get the labels for the tasks
             labels = list()
             if self.usable_objectives[0]:
-                pass # for now
-                # action_id = self.video_list[index].label_action
-                # if self.mappings[0]:
-                #     action_id = self.mappings[0][action_id]
-                # labels.append(action_id)
+                action_id = self.video_list[index].label_action
+                if self.mappings[0]:
+                    action_id = self.mappings[0][action_id]
+                labels.append(action_id)
             if self.usable_objectives[1]:
                 verb_id = self.video_list[index].label_verb
                 if self.mappings[1]:
@@ -1381,8 +1388,13 @@ class VideoAndPointDatasetLoader(torchDataset):
                     noun_id = self.mappings[2][noun_id]
                 labels.append(noun_id)
 
-            labels = np.array(labels, dtype=np.float32)
-            labels = np.concatenate((labels, points.flatten()))
+            if self.use_hands:
+                labels = np.array(labels, dtype=np.float32)
+            else:
+                labels = np.array(labels, dtype=np.int64)  # numpy array for pytorch dataloader compatibility
+            if self.use_hands:
+                labels = np.concatenate((labels, hand_points.flatten()))
+
             if not self.validation:
                 return clip_input, labels
             else:
@@ -1497,7 +1509,8 @@ if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
     #point_list_prefix = 'hand_detection_tracks_lr001'
     # video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split2.txt"
-    video_list_file = r"splits\gtea_rgb_frames\test_split1.txt"
+    # video_list_file = r"splits\gtea_rgb_frames\test_split1.txt"
+    video_list_file = r"splits\epic_rgb_nd_brd_act\epic_rgb_val_1.txt"
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
@@ -1506,7 +1519,7 @@ if __name__=='__main__':
     mean_3d = [124 / 255, 117 / 255, 104 / 255]
     std_3d = [0.229, 0.224, 0.225]
 
-    seed = 1
+    seed = 0
     train_transforms = transforms.Compose([
         RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288], seed=seed),
         RandomCrop((224, 224), seed=seed), RandomHorizontalFlip(seed=seed), RandomHLS(vars=[15, 35, 25]),
@@ -1516,19 +1529,19 @@ if __name__=='__main__':
 
     val_sampler = MiddleSampling(num=16)
     # val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=seed)
-    # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix, num_classes=2,
-    #                                     img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
-    #                                     batch_transform=train_transforms, vis_data=True)
+    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix='hand_detection_tracks_lr005',
+                                        num_classes=[2521, 125, 322], img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
+                                        batch_transform=train_transforms, use_hands=False, vis_data=True)
     # loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
     #                                 extra_nouns=False, validation=True, vis_data=False)
     # loader = FromVideoDatasetLoaderGulp(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
     #                                     batch_transform=train_transforms, extra_nouns=False, validation=True,
     #                                     vis_data=True, use_hands=True, hand_list_prefix=r"D:\Code\epic-kitchens-processing\output\gtea_hand_trackslr005\clean")
-    loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
-                                          batch_transform=train_transforms, extra_nouns=False, validation=True,
-                                          vis_data=True,
-                                          use_hands=False, hand_list_prefix=r"gtea_hand_detection_tracks_lr005",
-                                          use_gaze=True, gaze_list_prefix=r"gtea_gaze_tracks")
+    # loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
+    #                                       batch_transform=train_transforms, extra_nouns=False, validation=True,
+    #                                       vis_data=True,
+    #                                       use_hands=False, hand_list_prefix=r"gtea_hand_detection_tracks_lr005",
+    #                                       use_gaze=True, gaze_list_prefix=r"gtea_gaze_tracks")
 
     for ind in range(len(loader)):
         item = loader.__getitem__(ind)

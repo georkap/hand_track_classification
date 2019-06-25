@@ -18,14 +18,13 @@ from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args
 from utils.file_utils import print_and_save, save_mt_checkpoints, resume_checkpoint, init_folders
 from utils.dataset_loader import VideoAndPointDatasetLoader, prepare_sampler
-from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, \
-    Resize, CenterCrop
+from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, Normalize, Resize, CenterCrop
 from utils.train_utils import load_lr_scheduler, train_mfnet_mo, test_mfnet_mo
 
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
-EPIC_CLASSES = [0, 125, 322] # -1 is because I don't remember the combinations currently
+EPIC_CLASSES = [2521, 125, 322] # -1 is because I don't remember the combinations currently
 def main():
     args, model_name = parse_args('mfnet', val=False)
 
@@ -53,7 +52,7 @@ def main():
     #     objectives_text += " gaze, "
     #     num_coords += 1
     #     num_objectives += 1
-    if True: #args.use_hands:
+    if args.use_hands:
         objectives_text += " hands, "
         num_coords += 2
         num_objectives += 1
@@ -62,7 +61,6 @@ def main():
     print_and_save(objectives_text, log_file)
     # for now just limit the tasks to max 3 and dont take extra nouns into account
     model_ft = mfnet_3d(num_classes, dropout=args.dropout, **kwargs)
-
     if args.pretrained:
         checkpoint = torch.load(args.pretrained_model_path)
         # below line is needed if network is trained with DataParallel
@@ -78,28 +76,28 @@ def main():
 
     # load train-val sampler
     train_sampler = prepare_sampler("train", args.clip_length, args.frame_interval)
-    test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
-
-    # load train-val transforms
     train_transforms = transforms.Compose([
-        RandomScale(make_square=True, aspect_ratio=[0.8, 1. / 0.8], slen=[224, 288]),
+        RandomScale(make_square=True, aspect_ratio=[0.8, 1./0.8], slen=[224, 288]),
         RandomCrop((224, 224)), RandomHorizontalFlip(), RandomHLS(vars=[15, 35, 25]),
         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-    test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
-         ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
-
-    # make train-val dataset loaders
     train_loader = VideoAndPointDatasetLoader(train_sampler, args.train_list, point_list_prefix=args.bpv_prefix,
                                               num_classes=num_classes, img_tmpl='frame_{:010d}.jpg',
-                                              norm_val=[456., 256., 456., 256.], batch_transform=train_transforms)
-    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list, point_list_prefix=args.bpv_prefix,
-                                             num_classes=num_classes, img_tmpl='frame_{:010d}.jpg',
-                                             norm_val=[456., 256., 456., 256.], batch_transform=test_transforms)
-
-    # make train-val iterators
+                                              norm_val=[456., 256., 456., 256.], batch_transform=train_transforms,
+                                              use_hands=args.use_hands)
     train_iterator = torch.utils.data.DataLoader(train_loader, batch_size=args.batch_size,
                                                  shuffle=True, num_workers=args.num_workers,
                                                  pin_memory=True)
+
+    test_sampler = prepare_sampler("val", args.clip_length, args.frame_interval)
+    test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
+                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
+
+    # make train-val dataset loaders
+    test_loader = VideoAndPointDatasetLoader(test_sampler, args.test_list, point_list_prefix=args.bpv_prefix,
+                                             num_classes=num_classes, img_tmpl='frame_{:010d}.jpg',
+                                             norm_val=[456., 256., 456., 256.], batch_transform=test_transforms,
+                                             use_hands=args.use_hands)
+
     test_iterator = torch.utils.data.DataLoader(test_loader, batch_size=args.batch_size,
                                                 shuffle=False, num_workers=args.num_workers,
                                                 pin_memory=True)
@@ -137,13 +135,13 @@ def main():
     num_valid_classes = len([cls for cls in num_classes if cls > 0])
     new_top1, top1 = [0.0] * num_valid_classes, [0.0] * num_valid_classes
     for epoch in range(args.max_epochs):
-        train(model_ft, optimizer, ce_loss, train_iterator, num_valid_classes, False, True, epoch,
+        train(model_ft, optimizer, ce_loss, train_iterator, num_valid_classes, False, args.use_hands, epoch,
               log_file, args.gpus, lr_scheduler)
         if (epoch + 1) % args.eval_freq == 0:
             if args.eval_on_train:
-                test(model_ft, ce_loss, train_iterator, num_valid_classes, False, True, epoch,
+                test(model_ft, ce_loss, train_iterator, num_valid_classes, False, args.use_hands, epoch,
                      "Train", log_file, args.gpus)
-            new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, False, True, epoch,
+            new_top1 = test(model_ft, ce_loss, test_iterator, num_valid_classes, False, args.use_hands, epoch,
                             "Test", log_file, args.gpus)
             top1 = save_mt_checkpoints(model_ft, optimizer, top1, new_top1, args.save_all_weights, output_dir,
                                        model_name, epoch, log_file)
