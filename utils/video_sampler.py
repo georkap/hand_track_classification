@@ -4,6 +4,15 @@ Author: Yunpeng Chen
 import math
 import numpy as np
 
+class DoubleFullSampling(object):
+    """samples every frame twice i.e. idxs = [0, 0, 1, 1, 2, 2, ... ]"""
+    def sampling(self, range_max, v_id=None, pred_failed=False, start_frame=0):
+        return list(np.repeat(list(range(range_max)), 2))
+
+class FullSampling(object):
+    """samples all the frames in a video"""
+    def sampling(self, range_max, v_id=None, pred_failed=False, start_frame=0):
+        return list(range(range_max))
 
 class MiddleSampling(object):
     def __init__(self, num):

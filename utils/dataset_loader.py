@@ -86,12 +86,14 @@ def load_point_samples(samples_list, bpv_prefix=None):
 # from PIL import Image
 def load_images(data_path, frame_indices, image_tmpl):
     images = []
-    for f_ind in frame_indices:
+    # images = np.zeros((len(frame_indices), 640, 480, 3))
+    for i, f_ind in enumerate(frame_indices):
         im_name = os.path.join(data_path, image_tmpl.format(f_ind))
         # next_image = np.array(Image.open(im_name).convert('RGB'))
         next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
         next_image = cv2.cvtColor(next_image, cv2.COLOR_BGR2RGB)
         images.append(next_image)
+        # images[i] = next_image
     return images
 
 
@@ -462,8 +464,9 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
             gaze_data = load_pickle(gaze_track_path)
 
             gaze_track = np.array([[value[0], value[1]] for key, value in gaze_data.items()], dtype=np.float32)
-            gaze_track = gaze_track[sampled_idxs]
-            if not self.vis_data:
+            if 'DoubleFullSampling' not in self.sampler.__repr__():
+                gaze_track = gaze_track[sampled_idxs]
+            if 'DoubleFullSampling' not in self.sampler.__repr__() and not self.vis_data:
                 gaze_track = gaze_track[::2]
             gaze_track *= self.norm_val[:2] # probably slower like this, but more robust following hand method
 

@@ -22,10 +22,9 @@ from torch.nn import DataParallel
 from models.mfnet_3d_mo import MFNET_3D as MFNET_3D_MO
 from utils.argparse_utils import parse_args, make_log_file_name
 from utils.file_utils import print_and_save
-from utils.dataset_loader import FromVideoDatasetLoaderGulp, VideoFromImagesDatasetLoader
+from utils.dataset_loader import VideoFromImagesDatasetLoader
 from utils.dataset_loader_utils import Resize, RandomCrop, ToTensorVid, Normalize, CenterCrop
-from utils.calc_utils import eval_final_print_mt
-from utils.video_sampler import RandomSampling, MiddleSampling
+from utils.video_sampler import RandomSampling, MiddleSampling, DoubleFullSampling
 from utils.train_utils import validate_mfnet_mo_gaze
 
 np.set_printoptions(linewidth=np.inf, threshold=np.inf)
@@ -73,6 +72,8 @@ def main():
         crop_type = CenterCrop((224, 224)) if args.eval_crop == 'center' else RandomCrop((224, 224))
         if args.eval_sampler == 'middle':
             val_sampler = MiddleSampling(num=args.clip_length)
+        elif args.eval_sampler == 'doublefull':
+            val_sampler = DoubleFullSampling()
         else:
             val_sampler = RandomSampling(num=args.clip_length,
                                          interval=args.frame_interval,

@@ -834,6 +834,48 @@ def calc_auc(pred, gt):
 
 
 def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
+
+    def inner_batch_calc(_model, _inputs, _gaze_targets, _frame_counter, _actual_frame_counter, _aae_frame, _auc_frame,
+                         _aae_temporal, _auc_temporal, _to_print, _log_file, _mf_remaining=8):
+
+        _outputs, _coords, _heatmaps = _model(_inputs)
+
+        _gaze_coords = _coords[:, :, 0, :]
+        _gaze_coords = unnorm_gaze_coords(_gaze_coords).cpu().numpy()
+
+        _batch_size, _temporal_size, _ = _gaze_targets.shape
+        for _b in range(_batch_size): # this will always be one, otherwise torch.stack complains for variable temporal dim.
+            _aae_temp = []
+            _auc_temp = []
+            for _t in range(_temporal_size-_mf_remaining, _temporal_size):
+                # after transforms target gaze might be off the image. this is not evaluated
+                _actual_frame_counter += 1
+                if _gaze_targets[_b, _t][0] < 0 or _gaze_targets[_b, _t][0] >= 224 or _gaze_targets[_b, _t][1] < 0 or \
+                        _gaze_targets[_b, _t][1] >= 224:
+                    continue
+                _frame_counter += 1
+                _angle_deg = calc_aae(_gaze_coords[_b, _t], _gaze_targets[_b, _t])
+                _aae_temp.append(_angle_deg)
+                _aae_frame.update(_angle_deg)  # per frame
+
+                _auc_once = calc_auc(_gaze_coords[_b, _t], gaze_targets[_b, _t])
+                _auc_temp.append(_auc_once)
+                _auc_frame.update(_auc_once)
+            _aae_temporal.update(np.mean(_aae_temp))  # per video segment
+            _auc_temporal.update(np.mean(_auc_temp))
+
+
+        _to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(_aae_frame.val,
+                                                                                                   _aae_frame.avg,
+                                                                                                   _aae_temporal.val,
+                                                                                                   _aae_temporal.avg)
+        _to_print += '::auc_frame {:.3f}[avg:{:.3f}], auc_temporal {:.3f}[avg:{:.3f}]]'.format(_auc_frame.val,
+                                                                                               _auc_frame.avg,
+                                                                                               _auc_temporal.val,
+                                                                                               _auc_temporal.avg)
+        print_and_save(_to_print, _log_file)
+        return _auc_frame, _auc_temporal, _aae_frame, _aae_temporal, _frame_counter, _actual_frame_counter
+
     auc_frame, auc_temporal = AverageMeter(), AverageMeter()
     aae_frame, aae_temporal = AverageMeter(), AverageMeter()
     print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
@@ -841,11 +883,17 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
     with torch.no_grad():
         model.eval()
         frame_counter = 0
+        actual_frame_counter = 0
         video_counter = 0
         for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
+            video_counter += 1
+            to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
+
             inputs = inputs.cuda()
-            outputs, coords, heatmaps = model(inputs)
             targets = targets.cuda().transpose(0, 1)
+
+            double_temporal_size = inputs.shape[2]
+            temporal_size = double_temporal_size // 2
 
             if use_gaze or use_hands:
                 cls_targets = targets[:num_outputs, :].long()
@@ -853,44 +901,32 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
                 cls_targets = targets
             assert len(cls_targets) == num_outputs
 
-            gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1, 0).reshape(-1, 8, 1, 2)
+            gaze_targets = targets[num_outputs:num_outputs + 2*temporal_size, :].transpose(1, 0).reshape(-1, temporal_size, 1, 2)
             gaze_targets.squeeze_(2)
             gaze_targets = unnorm_gaze_coords(gaze_targets).cpu().numpy()
 
-            gaze_coords = coords[:, :, 0, :]
-            gaze_coords = unnorm_gaze_coords(gaze_coords).cpu().numpy()
+            # batch over the blocks of 16 frames for mfnet
+            mf_blocks = double_temporal_size//16
+            mf_remaining = double_temporal_size%16
+            for mf_i in range(mf_blocks):
+                mf_inputs = inputs[:,:,mf_i*16:(mf_i+1)*16,:,:]
+                mf_targets = gaze_targets[:, mf_i*8:(mf_i+1)*8]
 
-            batch_size, temporal_size, _ = gaze_targets.shape
-            for b in range(batch_size):
-                aae_temp = []
-                auc_temp = []
-                video_counter += 1
-                for t in range(temporal_size):
-                    # after transforms target gaze might be off the image. this is not evaluated
-                    if gaze_targets[b,t][0] < 0 or gaze_targets[b,t][0] >= 224 or gaze_targets[b,t][1] < 0 or gaze_targets[b,t][1] >= 224:
-                        continue
-                    frame_counter += 1
-                    angle_deg = calc_aae(gaze_coords[b,t], gaze_targets[b,t])
-                    aae_temp.append(angle_deg)
-                    aae_frame.update(angle_deg) # per frame
+                auc_frame, auc_temporal, aae_frame, aae_temporal, frame_counter, actual_frame_counter = inner_batch_calc(
+                    model, mf_inputs, mf_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
+                    aae_temporal, auc_temporal, to_print, log_file
+                )
+            if mf_remaining > 0:
+                mf_inputs = inputs[:,:,double_temporal_size-16:,:,:]
+                mf_targets = gaze_targets[:, temporal_size-8:]
 
-                    auc_once = calc_auc(gaze_coords[b,t], gaze_targets[b,t])
-                    auc_temp.append(auc_once)
-                    auc_frame.update(auc_once)
-                aae_temporal.update(np.mean(aae_temp)) # per video segment
-                auc_temporal.update(np.mean(auc_temp))
+                auc_frame, auc_temporal, aae_frame, aae_temporal, frame_counter, actual_frame_counter = inner_batch_calc(
+                    model, mf_inputs, mf_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
+                    aae_temporal, auc_temporal, to_print, log_file, mf_remaining//2
+                )
 
-            to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
-            to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(aae_frame.val,
-                                                                                                       aae_frame.avg,
-                                                                                                       aae_temporal.val,
-                                                                                                       aae_temporal.avg)
-            to_print += '::auc_frame {:.3f}[avg:{:.3f}], auc_temporal {:.3f}[avg:{:.3f}]]'.format(auc_frame.val,
-                                                                                                  auc_frame.avg,
-                                                                                                  auc_temporal.val,
-                                                                                                  auc_temporal.avg)
-            print_and_save(to_print, log_file)
-        to_print = 'Evaluated in total {} frames in {} video segments.'.format(frame_counter, video_counter)
+        to_print = 'Evaluated in total {}/{} frames in {} video segments.'.format(frame_counter, actual_frame_counter,
+                                                                                  video_counter)
         print_and_save(to_print, log_file)
 
 

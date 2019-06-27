@@ -174,7 +174,18 @@ class Resize(object):
             new_h = self.size[1]
 
         if (h != new_h) or (w != new_w):
-            scaled_data = cv2.resize(data, (new_w, new_h), interpolation=self.interpolation)
+            resize_blocks = c//512
+            # remaining = c%512
+            if resize_blocks > 0:  # Even though it would fit, it will also do the batched resize if channels == 512, but I can avoid the check for channels= integer multiples of 512
+                partial_resize = []
+                for rbl in range(resize_blocks):
+                    partial_scaled_data = cv2.resize(data[:,:,rbl*512:(rbl+1)*512], (new_w, new_h), interpolation=self.interpolation)
+                    partial_resize.append(partial_scaled_data)
+                partial_scaled_data = cv2.resize(data[:, :, resize_blocks*512:], (new_w, new_h), interpolation=self.interpolation)
+                partial_resize.append(partial_scaled_data)
+                scaled_data = np.concatenate(partial_resize, axis=2)
+            else:
+                scaled_data = cv2.resize(data, (new_w, new_h), interpolation=self.interpolation)
         else:
             scaled_data = data
 
