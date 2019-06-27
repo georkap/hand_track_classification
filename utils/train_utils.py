@@ -840,6 +840,8 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
 
     with torch.no_grad():
         model.eval()
+        frame_counter = 0
+        video_counter = 0
         for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
             inputs = inputs.cuda()
             outputs, coords, heatmaps = model(inputs)
@@ -860,17 +862,22 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
 
             batch_size, temporal_size, _ = gaze_targets.shape
             for b in range(batch_size):
-                angles_temp = []
+                aae_temp = []
                 auc_temp = []
+                video_counter += 1
                 for t in range(temporal_size):
+                    # after transforms target gaze might be off the image. this is not evaluated
+                    if gaze_targets[b,t][0] < 0 or gaze_targets[b,t][0] >= 224 or gaze_targets[b,t][1] < 0 or gaze_targets[b,t][1] >= 224:
+                        continue
+                    frame_counter += 1
                     angle_deg = calc_aae(gaze_coords[b,t], gaze_targets[b,t])
-                    angles_temp.append(angle_deg)
+                    aae_temp.append(angle_deg)
                     aae_frame.update(angle_deg) # per frame
 
                     auc_once = calc_auc(gaze_coords[b,t], gaze_targets[b,t])
                     auc_temp.append(auc_once)
                     auc_frame.update(auc_once)
-                aae_temporal.update(np.mean(angles_temp)) # per video segment
+                aae_temporal.update(np.mean(aae_temp)) # per video segment
                 auc_temporal.update(np.mean(auc_temp))
 
             to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
@@ -883,6 +890,8 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
                                                                                                   auc_temporal.val,
                                                                                                   auc_temporal.avg)
             print_and_save(to_print, log_file)
+        to_print = 'Evaluated in total {} frames in {} video segments.'.format(frame_counter, video_counter)
+        print_and_save(to_print, log_file)
 
 
 

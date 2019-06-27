@@ -96,25 +96,9 @@ def main():
                                                pin_memory=True)
 
         # evaluate dataset
-        top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, args.use_gaze, args.use_hands,
+        validate(model_ft, ce_loss, val_iter, num_valid_classes, args.use_gaze, args.use_hands,
                                  checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
-        # calculate statistics
-        for ind in range(num_valid_classes):
-            video_preds = [x[0] for x in outputs[ind]]
-            video_labels = [x[1] for x in outputs[ind]]
-            mean_cls_acc, top1_acc = eval_final_print_mt(video_preds, video_labels, ind, valid_classes[ind], log_file)
-            overall_mean_cls_acc[ind] += mean_cls_acc
-            overall_top1[ind] += top1_acc
-
-    print_and_save("", log_file)
-    text_mean_cls_acc = "Mean Cls Acc ({} times)".format(args.mfnet_eval)
-    text_dataset_acc = "Dataset Acc ({} times)".format(args.mfnet_eval)
-    for ind in range(num_valid_classes):
-        text_mean_cls_acc += ", T{}::{} ".format(ind, (overall_mean_cls_acc[ind] / args.mfnet_eval))
-        text_dataset_acc += ", T{}::{} ".format(ind, (overall_top1[ind] / args.mfnet_eval))
-    print_and_save(text_mean_cls_acc, log_file)
-    print_and_save(text_dataset_acc, log_file)
 
 if __name__ == '__main__':
     main()
