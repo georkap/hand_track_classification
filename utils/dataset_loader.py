@@ -87,7 +87,7 @@ def load_point_samples(samples_list, bpv_prefix=None):
 def load_images(data_path, frame_indices, image_tmpl):
     images = []
     # images = np.zeros((len(frame_indices), 640, 480, 3))
-    for i, f_ind in enumerate(frame_indices):
+    for f_ind in frame_indices:
         im_name = os.path.join(data_path, image_tmpl.format(f_ind))
         # next_image = np.array(Image.open(im_name).convert('RGB'))
         next_image = cv2.imread(im_name, cv2.IMREAD_COLOR)
