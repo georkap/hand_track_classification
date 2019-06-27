@@ -30,6 +30,27 @@ torch.set_printoptions(linewidth=1000000, threshold=1000000)
 mean_3d = [124 / 255, 117 / 255, 104 / 255]
 std_3d = [0.229, 0.224, 0.225]
 
+def get_task_type_epic(action_classes, verb_classes, noun_classes):
+    """
+    This snippet to decided what type of task is given for evaluation. This is really experiment specific and needs to be
+    updated if things change. The only use for the task types is to make the evaluation on the classes with more than 100
+    samples at training for the epic evaluation.
+    If actions are trained explicitly then they are task0
+    if verbs are trained with actions they they are task1 else they are task0
+    if nouns are trained they are always verbtask+1, so either task2 or task1
+    if hands are trained they are always the last task so they do not change the above order.
+    :return: a list of task names that follows the size of 'num_valid_classes'
+    """
+    task_types = []
+    if action_classes > 0:
+        task_types.append("EpicActions")
+    if verb_classes > 0:
+        task_types.append("EpicVerbs")
+    if noun_classes > 0:
+        task_types.append("EpicNouns")
+    return task_types
+
+
 EPIC_CLASSES = [2521, 125, 322]
 def main():
     args = parse_args('mfnet', val=True)
@@ -91,12 +112,14 @@ def main():
         top1, outputs = validate(model_ft, ce_loss, val_iter, num_valid_classes, False, args.use_hands,
                                  checkpoint['epoch'], args.val_list.split("\\")[-1], log_file)
 
+        task_types = get_task_type_epic(args.action_classes, args.verb_classes, args.noun_classes)
         # calculate statistics
         for ind in range(num_valid_classes):
+            task_type = task_types[ind]
             video_preds = [x[0] for x in outputs[ind]]
             video_labels = [x[1] for x in outputs[ind]]
             mean_cls_acc, top1_acc = eval_final_print_mt(video_preds, video_labels, ind, valid_classes[ind], log_file,
-                                                         args.annotations_path, args.val_list)
+                                                         args.annotations_path, args.val_list, task_type=task_type)
             overall_mean_cls_acc[ind] += mean_cls_acc
             overall_top1[ind] += top1_acc
 

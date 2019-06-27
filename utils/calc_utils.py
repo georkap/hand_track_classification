@@ -152,7 +152,8 @@ def avg_rec_prec_trimmed(pred, labels, valid_class_indices, all_class_indices):
     
     return np.sum(precision)/len(precision), np.sum(recall)/len(recall), cm_trimmed_rows.astype(int)
 
-def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log_file, annotations_path=None, val_list=None):
+def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log_file, annotations_path=None,
+                        val_list=None, task_type = 'None'):
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels,
                                                                                   all_class_indices=list(range(int(current_classes))))
     print_and_save("Task {}".format(task_id), log_file)
@@ -162,21 +163,19 @@ def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log
         brd_splits = '_brd' in val_list
         valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path,
                                                                                                val_list, brd_splits, 100)
-        if task_id == 0: # 'Verbs': error prone if I ever train nouns on their own
+        if task_type == 'EpicVerbs': # 'Verbs': error prone if I ever train nouns on their own
             valid_indices, ids_sorted = valid_verb_indices, verb_ids_sorted
             all_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
-            cls_type = 'Verbs'
-        elif task_id == 1:
+        elif task_type == 'EpicNouns':
             valid_indices, ids_sorted = valid_noun_indices, noun_ids_sorted
             all_indices = list(range(int(352)))
-            cls_type = 'Noun'
         ave_pre, ave_rec, _ = avg_rec_prec_trimmed(video_preds, video_labels, valid_indices, all_indices)
-        print_and_save("{} > 100 instances at training:".format(cls_type), log_file)
+        print_and_save("{} > 100 instances at training:".format(task_type), log_file)
         print_and_save("Classes are {}".format(valid_indices), log_file)
         print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre, ave_rec), log_file)
-        print_and_save("Most common {} in training".format(cls_type), log_file)
-        print_and_save("15 {} rec {}".format(cls_type, recall[ids_sorted[:15]]), log_file)
-        print_and_save("15 {} pre {}".format(cls_type, precision[ids_sorted[:15]]), log_file)
+        print_and_save("Most common {} in training".format(task_type), log_file)
+        print_and_save("15 {} rec {}".format(task_type, recall[ids_sorted[:15]]), log_file)
+        print_and_save("15 {} pre {}".format(task_type, precision[ids_sorted[:15]]), log_file)
 
     print_and_save("Cls Rec {}".format(recall), log_file)
     print_and_save("Cls Pre {}".format(precision), log_file)

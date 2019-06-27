@@ -793,6 +793,99 @@ def test_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_ha
         print_and_save(final_print, log_file)
     return [tasktop1.avg for tasktop1 in top1_meters]
 
+import math
+
+def unnorm_gaze_coords(_coords):  # expecting values in [-1, 1]
+    return ((_coords + 1) * 224 - 1) / 2
+
+def calc_aae(pred, gt, avg='no'):
+    # input should be [2] with modalities=1
+    d = 112/math.tan(math.pi/6)
+    pred = pred - 112
+    gt = gt - 112
+    r1 = np.array([pred[0], pred[1], d])  # x, y are inverted in numpy but it doesn't change results
+    r2 = np.array([gt[0], gt[1], d])
+    # angles needs to be of dimension batch*temporal*modalities*1
+    angles = math.atan2(np.linalg.norm(np.cross(r1, r2)), np.dot(r1, r2))
+
+    # angles_deg = math.degrees(angles)
+    angles_deg = np.rad2deg(angles)
+    return angles_deg
+    # aae = None
+    # if avg == 'no':  # use each coordinate pair for error calculation
+    #     aae = [deg for deg in angles_deg.flatten()]
+    # elif avg == 'temporal':  # average the angles for one video segment
+    #     angles_deg = np.mean(angles_deg, 1)
+    #     aae = [deg for deg in angles_deg.flatten()]
+    #
+    # return aae
+
+from scipy import ndimage
+def calc_auc(pred, gt):
+    z = np.zeros((224, 224))
+    z[int(pred[0])][int(pred[1])] = 1
+    z = ndimage.filters.gaussian_filter(z, 14)
+    z = z - np.min(z)
+    z = z / np.max(z)
+    atgt = z[int(gt[0])][int(gt[1])]  # z[i][j]
+    fpbool = z > atgt
+    auc = (1 - float(fpbool.sum()) / (224 * 224))
+    return auc
+
+
+def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
+    auc_frame, auc_temporal = AverageMeter(), AverageMeter()
+    aae_frame, aae_temporal = AverageMeter(), AverageMeter()
+    print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)
+
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
+            inputs = inputs.cuda()
+            outputs, coords, heatmaps = model(inputs)
+            targets = targets.cuda().transpose(0, 1)
+
+            if use_gaze or use_hands:
+                cls_targets = targets[:num_outputs, :].long()
+            else:
+                cls_targets = targets
+            assert len(cls_targets) == num_outputs
+
+            gaze_targets = targets[num_outputs:num_outputs + 16, :].transpose(1, 0).reshape(-1, 8, 1, 2)
+            gaze_targets.squeeze_(2)
+            gaze_targets = unnorm_gaze_coords(gaze_targets).cpu().numpy()
+
+            gaze_coords = coords[:, :, 0, :]
+            gaze_coords = unnorm_gaze_coords(gaze_coords).cpu().numpy()
+
+            batch_size, temporal_size, _ = gaze_targets.shape
+            for b in range(batch_size):
+                angles_temp = []
+                auc_temp = []
+                for t in range(temporal_size):
+                    angle_deg = calc_aae(gaze_coords[b,t], gaze_targets[b,t])
+                    angles_temp.append(angle_deg)
+                    aae_frame.update(angle_deg) # per frame
+
+                    auc_once = calc_auc(gaze_coords[b,t], gaze_targets[b,t])
+                    auc_temp.append(auc_once)
+                    auc_frame.update(auc_once)
+                aae_temporal.update(np.mean(angles_temp)) # per video segment
+                auc_temporal.update(np.mean(auc_temp))
+
+            to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
+            to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(aae_frame.val,
+                                                                                                       aae_frame.avg,
+                                                                                                       aae_temporal.val,
+                                                                                                       aae_temporal.avg)
+            to_print += '::auc_frame {:.3f}[avg:{:.3f}], auc_temporal {:.3f}[avg:{:.3f}]]'.format(auc_frame.val,
+                                                                                                  auc_frame.avg,
+                                                                                                  auc_temporal.val,
+                                                                                                  auc_temporal.avg)
+            print_and_save(to_print, log_file)
+
+
+
 def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
     loss_meters = [AverageMeter() for _ in range(num_outputs)]
     losses = AverageMeter()
