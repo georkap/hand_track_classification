@@ -861,8 +861,10 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
                 _auc_once = calc_auc(_gaze_coords[_b, _t], gaze_targets[_b, _t])
                 _auc_temp.append(_auc_once)
                 _auc_frame.update(_auc_once)
-            _aae_temporal.update(np.mean(_aae_temp))  # per video segment
-            _auc_temporal.update(np.mean(_auc_temp))
+            if len(_aae_temp) > 0:
+                _aae_temporal.update(np.mean(_aae_temp))  # per video segment
+            if len(_auc_temp) > 0:
+                _auc_temporal.update(np.mean(_auc_temp))
 
 
         _to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(_aae_frame.val,
