@@ -159,7 +159,7 @@ def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log
     print_and_save("Task {}".format(task_id), log_file)
     print_and_save(cf, log_file)
 
-    if annotations_path:
+    if annotations_path and task_type in ['EpicVerbs', 'EpicNouns']:
         brd_splits = '_brd' in val_list
         valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path,
                                                                                                val_list, brd_splits, 100)
