@@ -832,52 +832,50 @@ def calc_auc(pred, gt):
     auc = (1 - float(fpbool.sum()) / (224 * 224))
     return auc
 
+def inner_batch_calc(_model, _inputs, _gaze_targets, _frame_counter, _actual_frame_counter, _aae_frame, _auc_frame,
+                     _aae_temporal, _auc_temporal, _to_print, _log_file, _mf_remaining=8):
+
+    _outputs, _coords, _heatmaps = _model(_inputs)
+
+    _gaze_coords = _coords[:, :, 0, :]
+    _gaze_coords = unnorm_gaze_coords(_gaze_coords).cpu().numpy()
+
+    _batch_size, _temporal_size, _ = _gaze_targets.shape
+    for _b in range(_batch_size): # this will always be one, otherwise torch.stack complains for variable temporal dim.
+        _aae_temp = []
+        _auc_temp = []
+        for _t in range(_temporal_size-_mf_remaining, _temporal_size):
+            # after transforms target gaze might be off the image. this is not evaluated
+            _actual_frame_counter += 1
+            if _gaze_targets[_b, _t][0] < 0 or _gaze_targets[_b, _t][0] >= 224 or _gaze_targets[_b, _t][1] < 0 or \
+                    _gaze_targets[_b, _t][1] >= 224:
+                continue
+            _frame_counter += 1
+            _angle_deg = calc_aae(_gaze_coords[_b, _t], _gaze_targets[_b, _t])
+            _aae_temp.append(_angle_deg)
+            _aae_frame.update(_angle_deg)  # per frame
+
+            _auc_once = calc_auc(_gaze_coords[_b, _t], _gaze_targets[_b, _t])
+            _auc_temp.append(_auc_once)
+            _auc_frame.update(_auc_once)
+        if len(_aae_temp) > 0:
+            _aae_temporal.update(np.mean(_aae_temp))  # per video segment
+        if len(_auc_temp) > 0:
+            _auc_temporal.update(np.mean(_auc_temp))
+
+
+    _to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(_aae_frame.val,
+                                                                                               _aae_frame.avg,
+                                                                                               _aae_temporal.val,
+                                                                                               _aae_temporal.avg)
+    _to_print += '::auc_frame {:.3f}[avg:{:.3f}], auc_temporal {:.3f}[avg:{:.3f}]]'.format(_auc_frame.val,
+                                                                                           _auc_frame.avg,
+                                                                                           _auc_temporal.val,
+                                                                                           _auc_temporal.avg)
+    print_and_save(_to_print, _log_file)
+    return _auc_frame, _auc_temporal, _aae_frame, _aae_temporal, _frame_counter, _actual_frame_counter
 
 def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
-
-    def inner_batch_calc(_model, _inputs, _gaze_targets, _frame_counter, _actual_frame_counter, _aae_frame, _auc_frame,
-                         _aae_temporal, _auc_temporal, _to_print, _log_file, _mf_remaining=8):
-
-        _outputs, _coords, _heatmaps = _model(_inputs)
-
-        _gaze_coords = _coords[:, :, 0, :]
-        _gaze_coords = unnorm_gaze_coords(_gaze_coords).cpu().numpy()
-
-        _batch_size, _temporal_size, _ = _gaze_targets.shape
-        for _b in range(_batch_size): # this will always be one, otherwise torch.stack complains for variable temporal dim.
-            _aae_temp = []
-            _auc_temp = []
-            for _t in range(_temporal_size-_mf_remaining, _temporal_size):
-                # after transforms target gaze might be off the image. this is not evaluated
-                _actual_frame_counter += 1
-                if _gaze_targets[_b, _t][0] < 0 or _gaze_targets[_b, _t][0] >= 224 or _gaze_targets[_b, _t][1] < 0 or \
-                        _gaze_targets[_b, _t][1] >= 224:
-                    continue
-                _frame_counter += 1
-                _angle_deg = calc_aae(_gaze_coords[_b, _t], _gaze_targets[_b, _t])
-                _aae_temp.append(_angle_deg)
-                _aae_frame.update(_angle_deg)  # per frame
-
-                _auc_once = calc_auc(_gaze_coords[_b, _t], gaze_targets[_b, _t])
-                _auc_temp.append(_auc_once)
-                _auc_frame.update(_auc_once)
-            if len(_aae_temp) > 0:
-                _aae_temporal.update(np.mean(_aae_temp))  # per video segment
-            if len(_auc_temp) > 0:
-                _auc_temporal.update(np.mean(_auc_temp))
-
-
-        _to_print += '[Gaze::aae_frame {:.3f}[avg:{:.3f}], aae_temporal {:.3f}[avg:{:.3f}],'.format(_aae_frame.val,
-                                                                                                   _aae_frame.avg,
-                                                                                                   _aae_temporal.val,
-                                                                                                   _aae_temporal.avg)
-        _to_print += '::auc_frame {:.3f}[avg:{:.3f}], auc_temporal {:.3f}[avg:{:.3f}]]'.format(_auc_frame.val,
-                                                                                               _auc_frame.avg,
-                                                                                               _auc_temporal.val,
-                                                                                               _auc_temporal.avg)
-        print_and_save(_to_print, _log_file)
-        return _auc_frame, _auc_temporal, _aae_frame, _aae_temporal, _frame_counter, _actual_frame_counter
-
     auc_frame, auc_temporal = AverageMeter(), AverageMeter()
     aae_frame, aae_temporal = AverageMeter(), AverageMeter()
     print_and_save('Evaluating after epoch: {} on {} set'.format(cur_epoch, dataset), log_file)

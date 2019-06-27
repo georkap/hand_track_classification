@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
 from torch.utils.data import Dataset as torchDataset
-from utils.video_sampler import RandomSampling, SequentialSampling, MiddleSampling
+from utils.video_sampler import RandomSampling, SequentialSampling, MiddleSampling, DoubleFullSampling, FullSampling
 
 
 def get_class_weights(list_file, num_classes, use_mapping):
@@ -1512,8 +1512,8 @@ if __name__=='__main__':
     # video_list_file = r"D:\Code\hand_track_classification\vis_utils\21247.txt"
     #point_list_prefix = 'hand_detection_tracks_lr001'
     # video_list_file = r"D:\Code\hand_track_classification\splits\gtea_rgb\fake_split2.txt"
-    # video_list_file = r"splits\gtea_rgb_frames\test_split1.txt"
-    video_list_file = r"splits\epic_rgb_nd_brd_act\epic_rgb_val_1.txt"
+    video_list_file = r"splits\gtea_rgb_frames\fake_split3.txt"
+    # video_list_file = r"splits\epic_rgb_nd_brd_act\epic_rgb_val_1.txt"
 
     import torchvision.transforms as transforms
     from utils.dataset_loader_utils import RandomScale, RandomCrop, RandomHorizontalFlip, RandomHLS, ToTensorVid, \
@@ -1530,21 +1530,22 @@ if __name__=='__main__':
     test_transforms = transforms.Compose([Resize((256, 256), False), CenterCrop((224, 224)),
          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
 
-    val_sampler = MiddleSampling(num=16)
+    # val_sampler = MiddleSampling(num=16)
+    val_sampler = FullSampling()
     # val_sampler = RandomSampling(num=16, interval=2, speed=[1.0, 1.0], seed=seed)
-    loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix='hand_detection_tracks_lr005',
-                                        num_classes=[2521, 125, 322], img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
-                                        batch_transform=train_transforms, use_hands=False, vis_data=True)
+    # loader = VideoAndPointDatasetLoader(val_sampler, video_list_file, point_list_prefix='hand_detection_tracks_lr005',
+    #                                     num_classes=[2521, 125, 322], img_tmpl='frame_{:010d}.jpg', norm_val=[456., 256., 456., 256.],
+    #                                     batch_transform=train_transforms, use_hands=False, vis_data=True)
     # loader = FromVideoDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53], batch_transform=train_transforms,
     #                                 extra_nouns=False, validation=True, vis_data=False)
     # loader = FromVideoDatasetLoaderGulp(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
     #                                     batch_transform=train_transforms, extra_nouns=False, validation=True,
     #                                     vis_data=True, use_hands=True, hand_list_prefix=r"D:\Code\epic-kitchens-processing\output\gtea_hand_trackslr005\clean")
-    # loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
-    #                                       batch_transform=train_transforms, extra_nouns=False, validation=True,
-    #                                       vis_data=True,
-    #                                       use_hands=False, hand_list_prefix=r"gtea_hand_detection_tracks_lr005",
-    #                                       use_gaze=True, gaze_list_prefix=r"gtea_gaze_tracks")
+    loader = VideoFromImagesDatasetLoader(val_sampler, video_list_file, 'GTEA', [106, 0, 2], [106, 19, 53],
+                                          batch_transform=test_transforms, extra_nouns=False, validation=True,
+                                          vis_data=True,
+                                          use_hands=False, hand_list_prefix=r"gtea_hand_detection_tracks_lr005",
+                                          use_gaze=True, gaze_list_prefix=r"gtea_gaze_tracks")
 
     for ind in range(len(loader)):
         item = loader.__getitem__(ind)
