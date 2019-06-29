@@ -48,6 +48,50 @@ def init_splits_custom(available_pids):
     return split_dicts
 
 
+def get_action_classes(annotations_file, split_path, brd_splits, num_instances, actions_file):
+    annotations, split_dicts = init_annot_and_splits(annotations_file, brd_splits=brd_splits)
+    # export action classes with from verbs and nouns with more than 100 instances in training and that exist at least once in training
+    split_id = int(os.path.basename(split_path).split('.')[0].split('_')[-1]) - 1
+    split = split_dicts[split_id]
+    train = [k for (k, i) in split.items() if i == 'train']
+    val = [k for (k, i) in split.items() if i == 'val']
+
+    verbs_t_un, verbs_t_count = np.unique(annotations.loc[annotations['participant_id'].isin(train)].
+                                                          verb_class.values, return_counts=True)
+    nouns_t_un, nouns_t_count = np.unique(annotations.loc[annotations['participant_id'].isin(train)].
+                                                          noun_class.values, return_counts=True)
+
+    actions_t_all = annotations[annotations['participant_id'].isin(train)][['verb_class', 'noun_class']]
+
+    # find action combinations
+    verbs_training = dict(zip(verbs_t_un, verbs_t_count))
+    nouns_training = dict(zip(nouns_t_un, nouns_t_count))
+    verbs_t_instances, nouns_t_instances = {}, {}
+    action_t_combinations = []
+    for key, item in verbs_training.items():
+        if int(item) >= num_instances:
+            verbs_t_instances[key] = item
+    for key, item in nouns_training.items():
+        if int(item) >= num_instances:
+            nouns_t_instances[key] = item
+    for key_verb, _ in verbs_t_instances.items():
+        for key_noun, __ in nouns_t_instances.items():
+            if len(actions_t_all[actions_t_all.verb_class==int(key_verb)][actions_t_all.noun_class==int(key_noun)]) > 0:
+                action_t_combinations.append("{}_{}".format(key_verb, key_noun))
+
+    all_actions = pandas.read_csv(actions_file)
+    action_t_classes = dict()
+    for key in action_t_combinations:
+        action_id = all_actions[all_actions.class_key == key].action_id.item()
+        action_t_classes[action_id] = True
+
+    return list(action_t_classes.keys())
+
+
+
+
+
+
 def get_classes(annotations_file, split_path, brd_splits, num_instances):
     annotations, split_dicts = init_annot_and_splits(annotations_file, brd_splits=brd_splits)
     # export verb and noun classes with more than 100 instances in training
@@ -153,7 +197,7 @@ def avg_rec_prec_trimmed(pred, labels, valid_class_indices, all_class_indices):
     return np.sum(precision)/len(precision), np.sum(recall)/len(recall), cm_trimmed_rows.astype(int)
 
 def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log_file, annotations_path=None,
-                        val_list=None, task_type = 'None'):
+                        val_list=None, task_type = 'None', action_file=None):
     cf, recall, precision, cls_acc, mean_cls_acc, top1_acc = analyze_preds_labels(video_preds, video_labels,
                                                                                   all_class_indices=list(range(int(current_classes))))
     print_and_save("Task {}".format(task_id), log_file)
@@ -162,7 +206,10 @@ def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log
     if annotations_path and task_type in ['EpicVerbs', 'EpicNouns']:
         brd_splits = '_brd' in val_list
         valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_path,
-                                                                                               val_list, brd_splits, 100)
+                                                                                             val_list, brd_splits, 100)
+        if task_type == 'EpicActions':
+            valid_indices = get_action_classes(annotations_path, val_list, brd_splits, 100, action_file)
+            all_indices = list(range(2521))
         if task_type == 'EpicVerbs': # 'Verbs': error prone if I ever train nouns on their own
             valid_indices, ids_sorted = valid_verb_indices, verb_ids_sorted
             all_indices = list(range(int(125))) # manually set verb classes to avoid loading the verb names file that loads 125...
@@ -173,9 +220,10 @@ def eval_final_print_mt(video_preds, video_labels, task_id, current_classes, log
         print_and_save("{} > 100 instances at training:".format(task_type), log_file)
         print_and_save("Classes are {}".format(valid_indices), log_file)
         print_and_save("average precision {0:02f}%, average recall {1:02f}%".format(ave_pre, ave_rec), log_file)
-        print_and_save("Most common {} in training".format(task_type), log_file)
-        print_and_save("15 {} rec {}".format(task_type, recall[ids_sorted[:15]]), log_file)
-        print_and_save("15 {} pre {}".format(task_type, precision[ids_sorted[:15]]), log_file)
+        if task_type != 'EpicActions':
+            print_and_save("Most common {} in training".format(task_type), log_file)
+            print_and_save("15 {} rec {}".format(task_type, recall[ids_sorted[:15]]), log_file)
+            print_and_save("15 {} pre {}".format(task_type, precision[ids_sorted[:15]]), log_file)
 
     print_and_save("Cls Rec {}".format(recall), log_file)
     print_and_save("Cls Pre {}".format(precision), log_file)
@@ -215,3 +263,13 @@ def eval_final_print(video_preds, video_labels, cls_type, annotations_path, val_
     print_and_save("Mean Cls Acc {:.02f}%".format(mean_cls_acc), log_file)
     print_and_save("Dataset Acc {}".format(top1_acc), log_file)
     return mean_cls_acc, top1_acc
+
+if __name__=='__main__':
+    annotations_file = r"D:\Datasets\egocentric\EPIC_KITCHENS\EPIC_train_action_labels.csv"
+    split_path = r"splits\epic_rgb_nd_brd_act\epic_rgb_val_1.txt"
+    brd_splits = True
+    num_instances = 100
+    actions_file = r"D:\Datasets\egocentric\EPIC_KITCHENS\EPIC_action_classes.csv"
+    valid_action_indices = get_action_classes(annotations_file, split_path, brd_splits, num_instances, actions_file)
+    print(valid_action_indices)
+
