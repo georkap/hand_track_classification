@@ -22,6 +22,7 @@ def make_base_parser(val):
         parser.add_argument('ckpt_path', type=str)
         parser.add_argument('val_list', type=str)
         parser.add_argument('--annotations_path', type=str, default=None)
+        parser.add_argument('--epic_actions_path', type=str, default=None)
     parser.add_argument('--bpv_prefix', type=str, default='noun_bpv_oh', 
                         choices=['noun_bpv_oh', 'tracked_noun_bpv_oh_mh0', 'cln_noun_tracks_mh0', 'hand_detection_tracks',
                                  'hand_detection_tracks_lr', 'hand_detection_tracks_lr005', 'hand_detection_tracks_lr001'])

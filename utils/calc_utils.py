@@ -76,7 +76,11 @@ def get_action_classes(annotations_file, split_path, brd_splits, num_instances, 
             nouns_t_instances[key] = item
     for key_verb, _ in verbs_t_instances.items():
         for key_noun, __ in nouns_t_instances.items():
-            if len(actions_t_all[actions_t_all.verb_class==int(key_verb)][actions_t_all.noun_class==int(key_noun)]) > 0:
+            # to avoid the warning from the line below and make sure it works properly I split it in two steps
+            # if len(actions_t_all[actions_t_all.verb_class==int(key_verb)][actions_t_all.noun_class==int(key_noun)]) > 0:
+            temp = actions_t_all[actions_t_all.verb_class==int(key_verb)]
+            temp = temp[temp.noun_class==int(key_noun)]
+            if len(temp) > 0:
                 action_t_combinations.append("{}_{}".format(key_verb, key_noun))
 
     all_actions = pandas.read_csv(actions_file)
@@ -85,12 +89,10 @@ def get_action_classes(annotations_file, split_path, brd_splits, num_instances, 
         action_id = all_actions[all_actions.class_key == key].action_id.item()
         action_t_classes[action_id] = True
 
-    return list(action_t_classes.keys())
+    action_t_classes = list(action_t_classes.keys())
+    action_t_classes.sort()
 
-
-
-
-
+    return action_t_classes
 
 def get_classes(annotations_file, split_path, brd_splits, num_instances):
     annotations, split_dicts = init_annot_and_splits(annotations_file, brd_splits=brd_splits)
@@ -271,5 +273,7 @@ if __name__=='__main__':
     num_instances = 100
     actions_file = r"D:\Datasets\egocentric\EPIC_KITCHENS\EPIC_action_classes.csv"
     valid_action_indices = get_action_classes(annotations_file, split_path, brd_splits, num_instances, actions_file)
+    # valid_verb_indices, verb_ids_sorted, valid_noun_indices, noun_ids_sorted = get_classes(annotations_file, split_path,
+    # brd_splits, 100)
     print(valid_action_indices)
 
