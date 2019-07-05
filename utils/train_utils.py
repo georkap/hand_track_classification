@@ -832,7 +832,7 @@ def calc_auc(pred, gt):
     auc = (1 - float(fpbool.sum()) / (224 * 224))
     return auc
 
-def inner_batch_calc(_model, _inputs, _gaze_targets, _frame_counter, _actual_frame_counter, _aae_frame, _auc_frame,
+def inner_batch_calc(_model, _inputs, _gaze_targets, _or_targets, _frame_counter, _actual_frame_counter, _aae_frame, _auc_frame,
                      _aae_temporal, _auc_temporal, _to_print, _log_file, _mf_remaining=8):
 
     _outputs, _coords, _heatmaps = _model(_inputs)
@@ -848,7 +848,9 @@ def inner_batch_calc(_model, _inputs, _gaze_targets, _frame_counter, _actual_fra
             # after transforms target gaze might be off the image. this is not evaluated
             _actual_frame_counter += 1
             if _gaze_targets[_b, _t][0] < 0 or _gaze_targets[_b, _t][0] >= 224 or _gaze_targets[_b, _t][1] < 0 or \
-                    _gaze_targets[_b, _t][1] >= 224:
+                    _gaze_targets[_b, _t][1] >= 224: # gt out of evaluated area after cropping
+                continue
+            if _or_targets[_b, _t][0] == 0 and _or_targets[_b, _t][1] == 0: # bad ground truth
                 continue
             _frame_counter += 1
             _angle_deg = calc_aae(_gaze_coords[_b, _t], _gaze_targets[_b, _t])
@@ -885,12 +887,13 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
         frame_counter = 0
         actual_frame_counter = 0
         video_counter = 0
-        for batch_idx, (inputs, targets, video_names) in enumerate(test_iterator):
+        for batch_idx, (inputs, targets, orig_gaze, video_names) in enumerate(test_iterator):
             video_counter += 1
             to_print = '[Batch {}/{}]'.format(batch_idx, len(test_iterator))
 
             inputs = inputs.cuda()
             targets = targets.cuda().transpose(0, 1)
+            orig_gaze = orig_gaze.cuda().transpose(0, 1)
 
             double_temporal_size = inputs.shape[2]
             temporal_size = double_temporal_size // 2
@@ -905,23 +908,28 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
             gaze_targets.squeeze_(2)
             gaze_targets = unnorm_gaze_coords(gaze_targets).cpu().numpy()
 
+            orig_targets = orig_gaze[:2*temporal_size, :].transpose(1, 0).reshape(-1, temporal_size, 1, 2)
+            orig_targets.squeeze_(2)
+
             # batch over the blocks of 16 frames for mfnet
             mf_blocks = double_temporal_size//16
             mf_remaining = double_temporal_size%16
             for mf_i in range(mf_blocks):
                 mf_inputs = inputs[:,:,mf_i*16:(mf_i+1)*16,:,:]
                 mf_targets = gaze_targets[:, mf_i*8:(mf_i+1)*8]
+                or_targets = orig_targets[:, mf_i*8:(mf_i+1)*8]
 
                 auc_frame, auc_temporal, aae_frame, aae_temporal, frame_counter, actual_frame_counter = inner_batch_calc(
-                    model, mf_inputs, mf_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
+                    model, mf_inputs, mf_targets, or_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
                     aae_temporal, auc_temporal, to_print, log_file
                 )
             if mf_remaining > 0:
                 mf_inputs = inputs[:,:,double_temporal_size-16:,:,:]
                 mf_targets = gaze_targets[:, temporal_size-8:]
+                or_targets = orig_targets[:, temporal_size-8:]
 
                 auc_frame, auc_temporal, aae_frame, aae_temporal, frame_counter, actual_frame_counter = inner_batch_calc(
-                    model, mf_inputs, mf_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
+                    model, mf_inputs, mf_targets, or_targets, frame_counter, actual_frame_counter, aae_frame, auc_frame,
                     aae_temporal, auc_temporal, to_print, log_file, mf_remaining//2
                 )
 

@@ -418,7 +418,7 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
     OBJECTIVE_NAMES = ['label_action', 'label_verb', 'label_noun']
     def __init__(self, sampler, split_file, line_type, num_classes, max_num_classes, img_tmpl='img_{:05d}.jpg',
                  batch_transform=None, extra_nouns=False, use_gaze=False, gaze_list_prefix=None, use_hands=False,
-                 hand_list_prefix=None, validation=False, vis_data=False):
+                 hand_list_prefix=None, validation=False, gaze_evaluation=False, vis_data=False):
         self.sampler = sampler
         self.video_list = parse_samples_list(split_file, GTEADataLine)  # if line_type=='GTEA' else DataLine)
         self.extra_nouns = extra_nouns
@@ -440,6 +440,7 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
         self.hand_list_prefix = hand_list_prefix
         self.norm_val = [640., 480., 640., 480.]
         self.image_tmpl = img_tmpl
+        self.gaze_evaluation = gaze_evaluation
 
     def __len__(self):
         return len(self.video_list)
@@ -610,10 +611,14 @@ class VideoFromImagesDatasetLoader(torchDataset): # loads GTEA dataset from fram
                     vis_with_circle_gaze(clip_input[:,i, :, :].numpy().transpose(1, 2, 0), orig_gaze[i]*self.norm_val[:2], 'gaze trans. img not coords')
                     cv2.waitKey(0)
 
-        if not self.validation:
-            return clip_input, labels
-        else:
+        if self.validation:
             return clip_input, labels, instance_name
+        elif self.gaze_evaluation:
+            orig_gaze = np.array([[value[0], value[1]] for key, value in gaze_data.items()], dtype=np.float32).flatten()
+            return clip_input, labels, orig_gaze, instance_name
+        else:
+            return clip_input, labels
+
 
 
 from gulpio import GulpDirectory

@@ -89,7 +89,8 @@ def main():
         val_loader = VideoFromImagesDatasetLoader(val_sampler, args.val_list, 'GTEA', num_classes, GTEA_CLASSES,
                                                   use_gaze=args.use_gaze, gaze_list_prefix=args.gaze_list_prefix,
                                                   use_hands=args.use_hands, hand_list_prefix=args.hand_list_prefix,
-                                                  batch_transform=val_transforms, extra_nouns=False, validation=True)
+                                                  batch_transform=val_transforms, extra_nouns=False, validation=False,
+                                                  gaze_evaluation=True)
         val_iter = torch.utils.data.DataLoader(val_loader,
                                                batch_size=args.batch_size,
                                                shuffle=False,
