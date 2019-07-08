@@ -87,8 +87,11 @@ usage: main_mfnet.py [-h] [--base_output_dir BASE_OUTPUT_DIR]
                      train_list test_list
 ```
 
+## Download hand tracks dataset
+[Google Drive link](https://drive.google.com/file/d/1TSo2H6_bGuLdh6WgKYU9OJLoPAETcbPi/view?usp=sharing)
+
 ## Contact
 Georgios Kapidis
 georgios{dot}kapidis{at}noldus{dot}nl
 g{dot}kapidis{at}uu{dot}nl
-georgios{dot}kapidis{at}gmail{dot}nl
+georgios{dot}kapidis{at}gmail{dot}com
