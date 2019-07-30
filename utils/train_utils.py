@@ -937,6 +937,45 @@ def validate_mfnet_mo_gaze(model, criterion, test_iterator, num_outputs, use_gaz
                                                                                   video_counter)
         print_and_save(to_print, log_file)
 
+def validate_mfnet_mo_json(model, test_iterator, num_outputs, dataset, action_file):
+    json_outputs = dict()
+    json_outputs['version'] = '0.1'
+    json_outputs['challenge'] = 'action_recognition'
+    json_outputs['results'] = dict()
+
+    import pandas
+    all_action_ids = pandas.read_csv(action_file)
+
+    print("Running on test set {} of EPIC".format(dataset))
+    with torch.no_grad():
+        model.eval()
+        for batch_idx, (inputs, targets, uid) in enumerate(test_iterator):
+            inputs = inputs.cuda()
+            outputs, _, _ = model(inputs)
+
+            batch_size = outputs[0].size(0)
+
+            for j in range(batch_size):
+                action = outputs[0][j].detach().cpu().numpy().astype(np.float64)
+                verb = outputs[1][j].detach().cpu().numpy().astype(np.float64)
+                noun = outputs[2][j].detach().cpu().numpy().astype(np.float64)
+
+
+                json_outputs['results'][str(uid[j].item())]={'verb':{}, 'noun':{}, 'action':{}}
+                for i, v in enumerate(verb):
+                    json_outputs['results'][str(uid[j].item())]['verb'][str(i)]=v
+                for i, n in enumerate(noun):
+                    json_outputs['results'][str(uid[j].item())]['noun'][str(i)]=n
+                for i in range(322, 352):
+                    json_outputs['results'][str(uid[j].item())]['noun'][str(i)]=0.0
+                action_sort_ids = np.argsort(action)[::-1]
+                for i, a_id in enumerate(action_sort_ids[:100]):
+                    a = action[a_id]
+                    class_key = all_action_ids[all_action_ids.action_id==a_id].class_key.item()
+                    json_outputs['results'][str(uid[j].item())]['action'][class_key.replace('_',',')]=a
+            print('\r[Batch {}/{}]'.format(batch_idx, len(test_iterator)), end='')
+
+    return json_outputs
 
 
 def validate_mfnet_mo(model, criterion, test_iterator, num_outputs, use_gaze, use_hands, cur_epoch, dataset, log_file):
