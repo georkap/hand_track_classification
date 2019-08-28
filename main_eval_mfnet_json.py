@@ -75,7 +75,7 @@ def main():
 
 
     crop_type = CenterCrop((224, 224))
-    val_sampler = MiddleSampling(num=args.clip_length)
+    val_sampler = MiddleSampling(num=args.clip_length, window=64)
     val_transforms = transforms.Compose([Resize((256, 256), False), crop_type,
                                          ToTensorVid(), Normalize(mean=mean_3d, std=std_3d)])
     val_loader = VideoAndPointDatasetLoader(val_sampler, args.val_list, point_list_prefix=args.bpv_prefix,

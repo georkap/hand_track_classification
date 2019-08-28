@@ -15,23 +15,24 @@ class FullSampling(object):
         return list(range(range_max))
 
 class MiddleSampling(object):
-    def __init__(self, num):
+    def __init__(self, num, window=32):
         assert num > 0
         self.num = num
         self.interval = [-1]
+        self.window = window
 
     ''' sample uniformly between start frame and range_max if range_max < 32
             If range_max > 32 then target 32 frames around (start_frame+range_max)/2 and sample uniformly from them.
     '''
     def sampling(self, range_max, v_id=None, pref_failed=False, start_frame=0):
         assert range_max > 0
-        if range_max <= 32:
+        if range_max <= self.window:
             clip_start = start_frame
             clip_end = clip_start + range_max -1 # putting -1 here so that I dont change the sampler's behaviour by putting endpoint=False sto linspace
         else:
             middle = start_frame + range_max//2
-            clip_start = middle - 16
-            clip_end = middle + 16
+            clip_start = middle - self.window//2
+            clip_end = middle + self.window//2
         idxs = np.linspace(clip_start, clip_end, self.num).astype(dtype=np.int).tolist()
         for idx in idxs:
             assert idx >=start_frame and idx < start_frame+range_max

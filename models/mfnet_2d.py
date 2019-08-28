@@ -71,7 +71,7 @@ class MFNET_2D(nn.Module):
         # conv1 - x224 (x16)
         conv1_num_out = 16
         self.conv1 = nn.Sequential(OrderedDict([
-                    ('conv', nn.Conv2d( 3, conv1_num_out, kernel_size=(5,5), padding=(2,2), stride=(2,2), bias=False)),
+                    ('conv', nn.Conv2d( 1, conv1_num_out, kernel_size=(5,5), padding=(2,2), stride=(2,2), bias=False)),
                     ('bn', nn.BatchNorm2d(conv1_num_out)),
                     ('relu', nn.ReLU(inplace=True))
                     ]))
